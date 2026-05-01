@@ -26,11 +26,12 @@ _state_lock = threading.Lock()
 _state: dict[str, dict] = {}
 
 _OPS = {
-    ">":       lambda v, t: v is not None and v >  t,
-    ">=":      lambda v, t: v is not None and v >= t,
-    "<":       lambda v, t: v is not None and v <  t,
-    "<=":      lambda v, t: v is not None and v <= t,
-    "is_true": lambda v, _: bool(v),
+    ">":        lambda v, t: v is not None and v >  t,
+    ">=":       lambda v, t: v is not None and v >= t,
+    "<":        lambda v, t: v is not None and v <  t,
+    "<=":       lambda v, t: v is not None and v <= t,
+    "is_true":  lambda v, _: bool(v),
+    "is_false": lambda v, _: v is False,  # strict — None means "unknown", not "down"
 }
 
 
@@ -41,6 +42,14 @@ def _extract(snap: dict, metric: str):
     if metric == "swap":      return (sys_.get("swap") or {}).get("percent")
     if metric == "disk_root": return (sys_.get("disk") or {}).get("percent")
     if metric == "temp":      return sys_.get("temp_c")
+    # device.<name>.ok — bool, True iff last probe succeeded. Pair with
+    # op="is_false" for "alert when this device is down".
+    if metric.startswith("device.") and metric.endswith(".ok"):
+        name = metric[len("device."):-len(".ok")]
+        for d in snap.get("devices") or []:
+            if d.get("name") == name:
+                return bool(d.get("ok"))
+        return None  # device not in snapshot — treat as unknown, do not fire
     throttle_now = ((sys_.get("throttle") or {}).get("now")) or {}
     if metric in throttle_now:
         return throttle_now[metric]
@@ -59,6 +68,8 @@ def _format_message(rule: dict, value) -> str:
     threshold = rule.get("threshold")
     if rule["op"] == "is_true":
         return f"{rule['metric']} is active (rule {rule['id']})"
+    if rule["op"] == "is_false":
+        return f"{rule['metric']} is down (rule {rule['id']})"
     return (f"{rule['metric']} {rule['op']} {threshold} "
             f"(current: {_format_value(value)}, rule {rule['id']})")
 

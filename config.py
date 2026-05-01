@@ -90,9 +90,15 @@ ALERT_CHANNELS: list[dict] = []
 
 # Each rule fires when its metric meets the op/threshold for `sustain_sec`
 # consecutive seconds, and at most once per `cooldown_sec` while it stays true.
-# Supported metrics: cpu, memory, swap, disk_root, temp,
-# undervoltage, throttled, arm_freq_capped, soft_temp_limit (the throttle
-# bits use op="is_true").
+# Supported metrics:
+#   cpu, memory, swap, disk_root, temp                — numeric (use >, >=, <, <=)
+#   undervoltage, throttled, arm_freq_capped,
+#     soft_temp_limit                                 — bool (use is_true)
+#   device.<name>.ok                                  — bool, True iff probe ok
+#                                                       (use is_false for "down")
+# To alert on a watched device going down for >60 s, add a rule like:
+#   {"id": "router-down", "metric": "device.router.ok", "op": "is_false",
+#    "sustain_sec": 60, "cooldown_sec": 600}
 ALERT_RULES: list[dict] = [
     {"id": "cpu-high",     "metric": "cpu",          "op": ">",       "threshold": 90, "sustain_sec": 300, "cooldown_sec": 1800},
     {"id": "temp-hot",     "metric": "temp",         "op": ">",       "threshold": 75, "sustain_sec": 60,  "cooldown_sec": 1800},
