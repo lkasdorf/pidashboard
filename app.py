@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import queue
+import time
 
 from flask import Flask, Response, jsonify, render_template, request
 
@@ -78,7 +79,46 @@ def index():
 
 @app.get("/healthz")
 def healthz():
-    return jsonify(status="ok")
+    """Rich liveness/readiness probe for external monitors (Uptime Kuma, etc.).
+
+    Returns one of three statuses:
+      ok        — everything within thresholds, HTTP 200
+      degraded  — disk >80 % or temp >70 °C or swap >50 %, HTTP 200
+      critical  — currently throttled/undervolted or any alert firing, HTTP 503
+      warming-up — sampler hasn't produced a snapshot yet, HTTP 503
+    """
+    snap = sampler.latest()
+    if snap is None:
+        return jsonify(status="warming-up", ts=time.time()), 503
+    sys_ = snap.get("system") or {}
+    throttle_now = ((sys_.get("throttle") or {}).get("now")) or {}
+    disk_pct = ((sys_.get("disk") or {}).get("percent")) or 0
+    swap_pct = ((sys_.get("swap") or {}).get("percent")) or 0
+    temp_c = sys_.get("temp_c")
+    firing = [a["id"] for a in alerts.status() if a.get("firing")]
+
+    critical = bool(firing) or throttle_now.get("undervoltage") or throttle_now.get("throttled")
+    degraded = (disk_pct > 80) or (swap_pct > 50) or (temp_c is not None and temp_c > 70)
+    status = "critical" if critical else ("degraded" if degraded else "ok")
+
+    body = jsonify(
+        status=status,
+        ts=time.time(),
+        uptime_sec=int(sys_.get("uptime_sec", 0)),
+        checks={
+            "cpu_pct":       (sys_.get("cpu") or {}).get("percent"),
+            "memory_pct":    (sys_.get("memory") or {}).get("percent"),
+            "swap_pct":      swap_pct,
+            "disk_root_pct": disk_pct,
+            "temp_c":        temp_c,
+            "throttled":          bool(throttle_now.get("throttled")),
+            "undervoltage":       bool(throttle_now.get("undervoltage")),
+            "arm_freq_capped":    bool(throttle_now.get("arm_freq_capped")),
+            "soft_temp_limit":    bool(throttle_now.get("soft_temp_limit")),
+            "firing_alerts": firing,
+        },
+    )
+    return body, (503 if critical else 200)
 
 
 @app.get("/api/snapshot")
