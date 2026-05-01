@@ -212,6 +212,7 @@ function applySnapshot(snap) {
   refreshSparks();
   renderServices(snap.services);
   renderCron(snap.cron);
+  renderTimers(snap.timers || []);
   renderDocker(snap.docker || []);
   renderProcs(sys.top_processes);
   populateLogDropdowns(snap);
@@ -305,7 +306,7 @@ function renderProcs(items) {
 function renderDocker(items) {
   const tbody = document.querySelector("#docker-table tbody");
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">no containers (or docker unreachable)</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">no containers (or docker unreachable)</td></tr>';
     return;
   }
   tbody.innerHTML = items.map((c) => {
@@ -314,12 +315,40 @@ function renderDocker(items) {
       : c.state === "exited" || c.state === "dead"
         ? '<span class="dot bad"></span>'
         : '<span class="dot muted"></span>';
+    const stats = c.stats || {};
+    const memCell = stats.mem
+      ? `<span title="${escapeHtml(stats.mem_use || "")}">${escapeHtml(stats.mem)}</span>`
+      : "–";
     return `<tr>
       <td>${dot}<code>${escapeHtml(c.name)}</code></td>
       <td><code>${escapeHtml(c.image)}</code></td>
       <td>${escapeHtml(c.state)}</td>
+      <td>${escapeHtml(stats.cpu || "–")}</td>
+      <td>${memCell}</td>
       <td>${escapeHtml(c.status)}</td>
       <td><code>${escapeHtml(c.ports || "–")}</code></td>
+      <td><button class="show-docker-log" data-name="${escapeHtml(c.name)}">open</button></td>
+    </tr>`;
+  }).join("");
+}
+
+function renderTimers(items) {
+  const tbody = document.querySelector("#timers-table tbody");
+  if (!tbody) return;
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="muted">no timers</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((t) => {
+    const last = t.last ? fmtRelative(t.last) : '<span class="muted">–</span>';
+    const next = t.next
+      ? `<span title="${escapeHtml(new Date(t.next * 1000).toLocaleString("en-GB"))}">${fmtFromNow(t.next)}</span>`
+      : '<span class="muted">inactive</span>';
+    return `<tr>
+      <td><code>${escapeHtml(t.unit)}</code></td>
+      <td><code>${escapeHtml(t.activates)}</code></td>
+      <td>${last}</td>
+      <td>${next}</td>
     </tr>`;
   }).join("");
 }
@@ -527,6 +556,13 @@ document.querySelector("#cron-table").addEventListener("click", (ev) => {
   if (!btn) return;
   const job = btn.dataset.job;
   openLogModal(`${job} (last 200 lines)`, `${BASE}/api/cron/${encodeURIComponent(job)}/log?lines=200`);
+});
+
+document.querySelector("#docker-table").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button.show-docker-log");
+  if (!btn) return;
+  const name = btn.dataset.name;
+  openLogModal(`${name} (last 200 lines)`, `${BASE}/api/docker/${encodeURIComponent(name)}/log?lines=200`);
 });
 
 // ───────── tabs ─────────

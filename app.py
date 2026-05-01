@@ -8,6 +8,7 @@ Routes:
     GET  /stream                        Server-Sent Events live stream
     POST /api/services/<unit>/<action>  start/stop/restart whitelisted unit
     GET  /api/cron/<job>/log            tail last N lines of a cron log
+    GET  /api/docker/<name>/log         tail last N lines of a container log
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import config
 import sampler
 import storage
 from collectors import cron_jobs as cron_coll
+from collectors import docker as docker_coll
 from collectors import maintenance as maint_coll
 from collectors import network as net_coll
 from collectors import services as svc_coll
@@ -150,6 +152,15 @@ def api_cron_log(job: str):
     except ValueError:
         lines = 200
     return jsonify(lines=cron_coll.tail_log(job, lines))
+
+
+@app.get("/api/docker/<name>/log")
+def api_docker_log(name: str):
+    try:
+        lines = max(1, min(2000, int(request.args.get("lines", 200))))
+    except ValueError:
+        lines = 200
+    return jsonify(lines=docker_coll.logs(name, lines))
 
 
 @app.get("/api/network")
