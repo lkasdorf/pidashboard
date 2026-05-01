@@ -71,15 +71,27 @@ const classForTemp = (t) => {
 
 // ───────── sparklines ─────────
 const histories = { cpu: [], mem: [], temp: [] };
+const historiesTs = { cpu: [], mem: [], temp: [] };
 const histories7d = { cpu: [], mem: [], temp: [] };
+const histories7dTs = { cpu: [], mem: [], temp: [] };
 const MAX_POINTS = 360;
 let currentRange = "live";  // "live" (2h, snapshot-fed) or "7d" (one-shot fetch)
+let recentEventsCache = [];  // populated by fetchEvents, used as overlay markers
 
-function pushHist(key, v) {
-  const arr = histories[key];
+const EVENT_OVERLAY_COLOR = {
+  error:   "rgba(239, 68, 68, 0.55)",
+  warning: "rgba(251, 191, 36, 0.55)",
+  info:    "rgba(76, 201, 240, 0.35)",
+};
+
+function pushHist(key, v, ts) {
   if (v == null) return;
-  arr.push(v);
-  if (arr.length > MAX_POINTS) arr.shift();
+  histories[key].push(v);
+  historiesTs[key].push(ts || Date.now() / 1000);
+  if (histories[key].length > MAX_POINTS) {
+    histories[key].shift();
+    historiesTs[key].shift();
+  }
 }
 
 function drawSpark(canvas, data, opts = {}) {
@@ -114,30 +126,53 @@ function drawSpark(canvas, data, opts = {}) {
   ctx.lineTo(0, cssH);
   ctx.closePath();
   ctx.fill();
+
+  // Optional vertical event overlay. tsArray must be parallel to data.
+  const tsArray = opts.tsArray;
+  const events = opts.events;
+  if (tsArray && tsArray.length === data.length && events && events.length) {
+    const tsStart = tsArray[0];
+    const tsEnd = tsArray[tsArray.length - 1];
+    const tsSpan = tsEnd - tsStart;
+    if (tsSpan > 0) {
+      ctx.lineWidth = 1;
+      for (const ev of events) {
+        if (ev.ts < tsStart || ev.ts > tsEnd) continue;
+        const x = ((ev.ts - tsStart) / tsSpan) * cssW;
+        ctx.strokeStyle = EVENT_OVERLAY_COLOR[ev.severity] || EVENT_OVERLAY_COLOR.info;
+        ctx.beginPath();
+        ctx.moveTo(x, 0); ctx.lineTo(x, cssH);
+        ctx.stroke();
+      }
+    }
+  }
 }
 
 function refreshSparks() {
-  const source = currentRange === "7d" ? histories7d : histories;
+  const source   = currentRange === "7d" ? histories7d   : histories;
+  const sourceTs = currentRange === "7d" ? histories7dTs : historiesTs;
   document.querySelectorAll("canvas.spark").forEach((c) => {
     const key = c.dataset.key;
     const data = source[key] || [];
-    const opts = key === "temp"
+    const tsArray = sourceTs[key] || [];
+    const baseOpts = key === "temp"
       ? { color: "#fbbf24", min: 30, max: 90 }
       : { color: "#4cc9f0", min: 0, max: 100 };
-    drawSpark(c, data, opts);
+    drawSpark(c, data, { ...baseOpts, tsArray, events: recentEventsCache });
   });
 }
 
 async function loadRange(range) {
   const cache = range === "7d" ? histories7d : histories;
-  for (const k of Object.keys(cache)) cache[k].length = 0;
+  const cacheTs = range === "7d" ? histories7dTs : historiesTs;
+  for (const k of Object.keys(cache)) { cache[k].length = 0; cacheTs[k].length = 0; }
   try {
     const r = await fetch(`${BASE}/api/history?range=${encodeURIComponent(range === "7d" ? "7d" : "2h")}`);
     const data = await r.json();
     for (const s of data.samples || []) {
-      if (s.cpu != null) cache.cpu.push(s.cpu);
-      if (s.mem != null) cache.mem.push(s.mem);
-      if (s.temp != null) cache.temp.push(s.temp);
+      if (s.cpu != null) { cache.cpu.push(s.cpu); cacheTs.cpu.push(s.ts); }
+      if (s.mem != null) { cache.mem.push(s.mem); cacheTs.mem.push(s.ts); }
+      if (s.temp != null) { cache.temp.push(s.temp); cacheTs.temp.push(s.ts); }
     }
   } catch (_) {}
 }
@@ -186,17 +221,17 @@ function applySnapshot(snap) {
   setMetric("cpu-val", `${sys.cpu.percent.toFixed(0)}%`, classForPercent(sys.cpu.percent));
   document.getElementById("cpu-foot").textContent =
     `load: ${sys.cpu.load1.toFixed(2)} / ${sys.cpu.load5.toFixed(2)} / ${sys.cpu.load15.toFixed(2)}`;
-  pushHist("cpu", sys.cpu.percent);
+  pushHist("cpu", sys.cpu.percent, sys.ts);
   renderCores(sys.cpu.per_core);
 
   setMetric("mem-val", `${sys.memory.percent.toFixed(0)}%`, classForPercent(sys.memory.percent));
   document.getElementById("mem-foot").textContent =
     `${fmtBytes(sys.memory.used)} / ${fmtBytes(sys.memory.total)}`;
-  pushHist("mem", sys.memory.percent);
+  pushHist("mem", sys.memory.percent, sys.ts);
 
   if (sys.temp_c != null) {
     setMetric("temp-val", `${sys.temp_c.toFixed(1)} °C`, classForTemp(sys.temp_c));
-    pushHist("temp", sys.temp_c);
+    pushHist("temp", sys.temp_c, sys.ts);
   } else {
     setMetric("temp-val", "n/a");
   }
@@ -1089,12 +1124,16 @@ function fmtEventTime(ts) {
 }
 async function fetchEvents() {
   const root = document.getElementById("events-list");
-  if (!root) return;
   try {
     const r = await fetch(`${BASE}/api/events?limit=50`);
     if (!r.ok) return;
     const d = await r.json();
     const events = d.events || [];
+    // Cache for the sparkline overlay regardless of whether the list itself
+    // is in the DOM right now (Overview may not be the visible tab).
+    recentEventsCache = events;
+    refreshSparks();
+    if (!root) return;
     if (!events.length) {
       root.innerHTML = '<span class="muted">no events recorded yet</span>';
       return;
@@ -1117,9 +1156,9 @@ async function loadHistory() {
     const r = await fetch(`${BASE}/api/history`);
     const data = await r.json();
     for (const s of data.samples || []) {
-      pushHist("cpu", s.cpu);
-      pushHist("mem", s.mem);
-      if (s.temp != null) pushHist("temp", s.temp);
+      pushHist("cpu", s.cpu, s.ts);
+      pushHist("mem", s.mem, s.ts);
+      if (s.temp != null) pushHist("temp", s.temp, s.ts);
     }
     refreshSparks();
   } catch (_) {}
