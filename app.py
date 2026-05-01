@@ -169,11 +169,12 @@ def api_process(pid: int):
 @app.get("/api/system/log")
 def api_system_log():
     priority = request.args.get("priority", "warning")
+    source = request.args.get("source", "journal")
     try:
         lines = max(1, min(2000, int(request.args.get("lines", 100))))
     except ValueError:
         lines = 100
-    return jsonify(lines=syslog_coll.tail(priority, lines))
+    return jsonify(lines=syslog_coll.tail(priority, lines, source))
 
 
 def main() -> None:

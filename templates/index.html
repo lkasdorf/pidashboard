@@ -145,9 +145,21 @@
 </section>
 
 <section class="tab-panel" data-panel="logs" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs" hidden>
-  <section class="panel">
+  <nav class="tabs subtabs" role="tablist" aria-label="Log source">
+    <button class="tab" data-subtab="system"   role="tab" aria-selected="true"  aria-controls="subpanel-system"   id="subtab-system">System</button>
+    <button class="tab" data-subtab="services" role="tab" aria-selected="false" aria-controls="subpanel-services" id="subtab-services">Services</button>
+    <button class="tab" data-subtab="cron"     role="tab" aria-selected="false" aria-controls="subpanel-cron"     id="subtab-cron">Cron</button>
+  </nav>
+
+  <section class="panel sub-tab-panel" data-subpanel="system" id="subpanel-system" role="tabpanel" aria-labelledby="subtab-system">
     <h2>System log <span class="muted">(journalctl, last 100 lines)</span></h2>
     <div class="syslog-controls">
+      <label class="syslog-label">source
+        <select id="syslog-source">
+          <option value="journal" selected>journal</option>
+          <option value="kernel">kernel (-k)</option>
+        </select>
+      </label>
       <label class="syslog-label">priority
         <select id="syslog-priority">
           <option value="err">error+</option>
@@ -159,6 +171,30 @@
       <span id="syslog-meta" class="muted"></span>
     </div>
     <pre class="logbody" id="syslog-body">click refresh to load</pre>
+  </section>
+
+  <section class="panel sub-tab-panel" data-subpanel="services" id="subpanel-services" role="tabpanel" aria-labelledby="subtab-services" hidden>
+    <h2>Service journal <span class="muted">(journalctl -u, last 200 lines)</span></h2>
+    <div class="syslog-controls">
+      <label class="syslog-label">unit
+        <select id="svclog-unit"><option value="">(waiting for snapshot…)</option></select>
+      </label>
+      <button id="svclog-refresh">refresh</button>
+      <span id="svclog-meta" class="muted"></span>
+    </div>
+    <pre class="logbody" id="svclog-body">select a unit and click refresh</pre>
+  </section>
+
+  <section class="panel sub-tab-panel" data-subpanel="cron" id="subpanel-cron" role="tabpanel" aria-labelledby="subtab-cron" hidden>
+    <h2>Cron log <span class="muted">(file tail, last 200 lines)</span></h2>
+    <div class="syslog-controls">
+      <label class="syslog-label">job
+        <select id="cronlog-job"><option value="">(waiting for snapshot…)</option></select>
+      </label>
+      <button id="cronlog-refresh">refresh</button>
+      <span id="cronlog-meta" class="muted"></span>
+    </div>
+    <pre class="logbody" id="cronlog-body">select a job and click refresh</pre>
   </section>
 </section>
 

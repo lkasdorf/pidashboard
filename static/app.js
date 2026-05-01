@@ -182,6 +182,7 @@ function applySnapshot(snap) {
   renderCron(snap.cron);
   renderDocker(snap.docker || []);
   renderProcs(sys.top_processes);
+  populateLogDropdowns(snap);
   updateFavicon(sys.cpu.percent);
 
   conn.textContent = "live";
@@ -470,7 +471,7 @@ const TABS = ["overview", "services", "network", "logs"];
 
 function activateTab(name) {
   if (!TABS.includes(name)) name = "overview";
-  document.querySelectorAll(".tab").forEach((b) => {
+  document.querySelectorAll(".tabs:not(.subtabs) > .tab").forEach((b) => {
     const on = b.dataset.tab === name;
     b.setAttribute("aria-selected", on ? "true" : "false");
   });
@@ -479,10 +480,10 @@ function activateTab(name) {
   });
   if (name === "network") startNetworkPolling(); else stopNetworkPolling();
   if (name === "overview") refreshSparks();
-  if (name === "logs") fetchSyslog();
+  if (name === "logs") fetchActiveSubtab();
 }
 
-document.querySelectorAll(".tab").forEach((b) => {
+document.querySelectorAll(".tabs:not(.subtabs) > .tab").forEach((b) => {
   b.addEventListener("click", () => {
     const name = b.dataset.tab;
     history.replaceState(null, "", `#${name}`);
@@ -617,32 +618,114 @@ function renderSockets(sockets) {
     </tr>`).join("");
 }
 
-// ───────── system log tab ─────────
+// ───────── logs tab (sub-tabs: system / services / cron) ─────────
+const SUBTABS = ["system", "services", "cron"];
+
+function activateSubtab(name) {
+  if (!SUBTABS.includes(name)) name = "system";
+  document.querySelectorAll(".subtabs > .tab").forEach((b) => {
+    b.setAttribute("aria-selected", b.dataset.subtab === name ? "true" : "false");
+  });
+  document.querySelectorAll(".sub-tab-panel").forEach((p) => {
+    p.hidden = p.dataset.subpanel !== name;
+  });
+  fetchActiveSubtab();
+}
+
+function fetchActiveSubtab() {
+  const active = document.querySelector(".subtabs > .tab[aria-selected='true']");
+  const name = active ? active.dataset.subtab : "system";
+  if (name === "system") fetchSyslog();
+  if (name === "services") fetchServiceLog();
+  if (name === "cron") fetchCronLog();
+}
+
+document.querySelectorAll(".subtabs > .tab").forEach((b) => {
+  b.addEventListener("click", () => activateSubtab(b.dataset.subtab));
+});
+
+async function loadLog(bodyEl, metaEl, url, emptyMsg) {
+  if (!bodyEl) return;
+  bodyEl.textContent = "loading …";
+  if (metaEl) metaEl.textContent = "";
+  try {
+    const r = await fetch(url);
+    if (!r.ok) { bodyEl.textContent = `Error: ${r.status}`; return; }
+    const d = await r.json();
+    const lines = d.lines || [];
+    bodyEl.textContent = lines.length ? lines.join("\n") : emptyMsg;
+    bodyEl.scrollTop = bodyEl.scrollHeight;
+    if (metaEl) metaEl.textContent = `${lines.length} lines · loaded ${new Date().toLocaleTimeString("en-GB")}`;
+  } catch (e) {
+    bodyEl.textContent = `Error: ${e}`;
+  }
+}
+
+// system
+const syslogSourceEl = document.getElementById("syslog-source");
 const syslogPriorityEl = document.getElementById("syslog-priority");
 const syslogRefreshEl = document.getElementById("syslog-refresh");
 const syslogBodyEl = document.getElementById("syslog-body");
 const syslogMetaEl = document.getElementById("syslog-meta");
 
-async function fetchSyslog() {
-  if (!syslogBodyEl) return;
-  const priority = syslogPriorityEl.value;
-  syslogBodyEl.textContent = "loading …";
-  syslogMetaEl.textContent = "";
-  try {
-    const r = await fetch(`${BASE}/api/system/log?priority=${encodeURIComponent(priority)}&lines=100`);
-    if (!r.ok) { syslogBodyEl.textContent = `Error: ${r.status}`; return; }
-    const d = await r.json();
-    const lines = d.lines || [];
-    syslogBodyEl.textContent = lines.length ? lines.join("\n") : "(no entries at this priority)";
-    syslogBodyEl.scrollTop = syslogBodyEl.scrollHeight;
-    syslogMetaEl.textContent = `${lines.length} lines · loaded ${new Date().toLocaleTimeString("en-GB")}`;
-  } catch (e) {
-    syslogBodyEl.textContent = `Error: ${e}`;
-  }
+function fetchSyslog() {
+  if (!syslogPriorityEl) return;
+  const priority = encodeURIComponent(syslogPriorityEl.value);
+  const source = encodeURIComponent(syslogSourceEl ? syslogSourceEl.value : "journal");
+  loadLog(syslogBodyEl, syslogMetaEl,
+    `${BASE}/api/system/log?source=${source}&priority=${priority}&lines=100`,
+    "(no entries at this priority)");
 }
-
+if (syslogSourceEl) syslogSourceEl.addEventListener("change", fetchSyslog);
 if (syslogPriorityEl) syslogPriorityEl.addEventListener("change", fetchSyslog);
 if (syslogRefreshEl) syslogRefreshEl.addEventListener("click", fetchSyslog);
+
+// services (journalctl -u)
+const svclogUnitEl = document.getElementById("svclog-unit");
+const svclogRefreshEl = document.getElementById("svclog-refresh");
+const svclogBodyEl = document.getElementById("svclog-body");
+const svclogMetaEl = document.getElementById("svclog-meta");
+
+function fetchServiceLog() {
+  if (!svclogUnitEl) return;
+  const unit = svclogUnitEl.value;
+  if (!unit) { svclogBodyEl.textContent = "select a unit and click refresh"; return; }
+  loadLog(svclogBodyEl, svclogMetaEl,
+    `${BASE}/api/services/${encodeURIComponent(unit)}/log?lines=200`,
+    "(journal empty for this unit)");
+}
+if (svclogUnitEl) svclogUnitEl.addEventListener("change", fetchServiceLog);
+if (svclogRefreshEl) svclogRefreshEl.addEventListener("click", fetchServiceLog);
+
+// cron (file tail)
+const cronlogJobEl = document.getElementById("cronlog-job");
+const cronlogRefreshEl = document.getElementById("cronlog-refresh");
+const cronlogBodyEl = document.getElementById("cronlog-body");
+const cronlogMetaEl = document.getElementById("cronlog-meta");
+
+function fetchCronLog() {
+  if (!cronlogJobEl) return;
+  const job = cronlogJobEl.value;
+  if (!job) { cronlogBodyEl.textContent = "select a job and click refresh"; return; }
+  loadLog(cronlogBodyEl, cronlogMetaEl,
+    `${BASE}/api/cron/${encodeURIComponent(job)}/log?lines=200`,
+    "(log file empty)");
+}
+if (cronlogJobEl) cronlogJobEl.addEventListener("change", fetchCronLog);
+if (cronlogRefreshEl) cronlogRefreshEl.addEventListener("click", fetchCronLog);
+
+function populateLogDropdowns(snap) {
+  if (svclogUnitEl && snap.services && svclogUnitEl.dataset.populated !== "1") {
+    svclogUnitEl.innerHTML = snap.services.map((s) =>
+      `<option value="${escapeHtml(s.unit)}">${escapeHtml(s.unit)}</option>`).join("");
+    svclogUnitEl.dataset.populated = "1";
+  }
+  if (cronlogJobEl && snap.cron && cronlogJobEl.dataset.populated !== "1") {
+    cronlogJobEl.innerHTML = snap.cron.map((j) =>
+      `<option value="${escapeHtml(j.name)}">${escapeHtml(j.name)}</option>`).join("");
+    cronlogJobEl.dataset.populated = "1";
+  }
+}
 
 // ───────── favicon (CPU-tinted π) ─────────
 const faviconEl = document.getElementById("favicon");

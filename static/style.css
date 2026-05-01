@@ -192,6 +192,13 @@ button.pid-link {
 button.pid-link:hover { text-decoration-color: var(--accent); background: transparent; }
 button.pid-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
+/* ───────── log sub-tabs ───────── */
+.tabs.subtabs {
+  background: transparent; border: none; padding: 0;
+  margin: 0 0 12px 0; gap: 4px;
+}
+.subtabs .tab { font-size: 12px; padding: 4px 10px; }
+
 /* ───────── system log tab ───────── */
 .syslog-controls {
   display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap;
