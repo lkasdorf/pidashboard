@@ -951,12 +951,19 @@ const authFailedListEl = document.getElementById("auth-failed-list");
 const authAcceptedCountEl = document.getElementById("auth-accepted-count");
 const authFailedCountEl = document.getElementById("auth-failed-count");
 
+function fmtAuthTime(isoTs) {
+  if (!isoTs) return "";
+  const d = new Date(isoTs);
+  if (isNaN(d.getTime())) return isoTs;
+  return fmtEventTime(d.getTime() / 1000);
+}
+
 function renderAuthList(root, items, severity) {
   if (!items.length) { root.innerHTML = '<span class="muted">none in window</span>'; return; }
   root.innerHTML = items.slice().reverse().map((it) => {
-    const ts = it.ts || "";
-    return `<div class="event-row ${severity}">
-      <span class="event-when">${escapeHtml(ts)}</span>
+    const when = fmtAuthTime(it.ts);
+    return `<div class="event-row ${severity}" title="${escapeHtml(it.ts || "")}">
+      <span class="event-when">${escapeHtml(when)}</span>
       <span class="event-kind">${escapeHtml(it.user || "?")}</span>
       <span class="muted">${escapeHtml(it.ip || "")}</span>
     </div>`;

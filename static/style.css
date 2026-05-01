@@ -197,17 +197,22 @@ button.pid-link:focus-visible { outline: 2px solid var(--focus); outline-offset:
 .auth-col h3 { margin: 0 0 6px 0; font-size: 13px; font-weight: 600; }
 @media (max-width: 720px) { .auth-summary { grid-template-columns: 1fr; } }
 
-/* ───────── events list (overview) ───────── */
-.events-list { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+/* ───────── events list (overview + auth) ───────── */
+.events-list { display: flex; flex-direction: column; gap: 4px; font-size: 12px; min-width: 0; }
 .event-row {
-  display: grid; grid-template-columns: 14ch 1fr auto; gap: 10px; align-items: baseline;
+  display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline;
   padding: 4px 8px; border-radius: 4px; background: var(--panel-hi);
+  min-width: 0;
 }
 .event-row.error   { border-left: 2px solid #ef4444; }
 .event-row.warning { border-left: 2px solid #fbbf24; }
 .event-row.info    { border-left: 2px solid var(--accent); }
-.event-row .event-kind { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; }
-.event-row .event-when { color: var(--muted); white-space: nowrap; }
+.event-row .event-when { color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+.event-row .event-kind {
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere;
+}
+.event-row .muted { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
 
 /* ───────── range toggle (overview sparklines) ───────── */
 .range-toggle {
