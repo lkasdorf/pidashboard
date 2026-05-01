@@ -25,6 +25,10 @@
 <main>
 
 <section class="tab-panel" data-panel="overview" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+  <div class="range-toggle" role="group" aria-label="Sparkline range">
+    <button class="range-btn" data-range="live" aria-pressed="true">2 h live</button>
+    <button class="range-btn" data-range="7d"   aria-pressed="false">7 d</button>
+  </div>
   <div class="cards">
     <div class="card" data-metric="cpu">
       <div class="card-head"><h2>CPU</h2><span class="value" id="cpu-val">–</span></div>

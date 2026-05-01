@@ -74,6 +74,7 @@ def _build_snapshot() -> dict:
 
 def _loop() -> None:
     last_persist = 0.0
+    last_persist_long = 0.0
     while True:
         try:
             snap = _build_snapshot()
@@ -83,6 +84,9 @@ def _loop() -> None:
             if now - last_persist >= config.HISTORY_INTERVAL_SEC:
                 storage.insert(snap["system"])
                 last_persist = now
+            if now - last_persist_long >= config.LONG_HISTORY_INTERVAL_SEC:
+                storage.insert_long(snap["system"])
+                last_persist_long = now
         except Exception as exc:
             print(f"[sampler] error: {exc}", flush=True)
         time.sleep(config.LIVE_INTERVAL_SEC)

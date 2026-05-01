@@ -71,7 +71,9 @@ const classForTemp = (t) => {
 
 // ───────── sparklines ─────────
 const histories = { cpu: [], mem: [], temp: [] };
+const histories7d = { cpu: [], mem: [], temp: [] };
 const MAX_POINTS = 360;
+let currentRange = "live";  // "live" (2h, snapshot-fed) or "7d" (one-shot fetch)
 
 function pushHist(key, v) {
   const arr = histories[key];
@@ -115,15 +117,44 @@ function drawSpark(canvas, data, opts = {}) {
 }
 
 function refreshSparks() {
+  const source = currentRange === "7d" ? histories7d : histories;
   document.querySelectorAll("canvas.spark").forEach((c) => {
     const key = c.dataset.key;
-    const data = histories[key] || [];
+    const data = source[key] || [];
     const opts = key === "temp"
       ? { color: "#fbbf24", min: 30, max: 90 }
       : { color: "#4cc9f0", min: 0, max: 100 };
     drawSpark(c, data, opts);
   });
 }
+
+async function loadRange(range) {
+  const cache = range === "7d" ? histories7d : histories;
+  for (const k of Object.keys(cache)) cache[k].length = 0;
+  try {
+    const r = await fetch(`${BASE}/api/history?range=${encodeURIComponent(range === "7d" ? "7d" : "2h")}`);
+    const data = await r.json();
+    for (const s of data.samples || []) {
+      if (s.cpu != null) cache.cpu.push(s.cpu);
+      if (s.mem != null) cache.mem.push(s.mem);
+      if (s.temp != null) cache.temp.push(s.temp);
+    }
+  } catch (_) {}
+}
+
+async function setRange(range) {
+  if (range !== "live" && range !== "7d") return;
+  currentRange = range;
+  document.querySelectorAll(".range-btn").forEach((b) => {
+    b.setAttribute("aria-pressed", b.dataset.range === range ? "true" : "false");
+  });
+  if (range === "7d") await loadRange("7d");
+  refreshSparks();
+}
+
+document.querySelectorAll(".range-btn").forEach((b) => {
+  b.addEventListener("click", () => setRange(b.dataset.range));
+});
 
 function setMetric(id, text, cls = "") {
   const el = document.getElementById(id);

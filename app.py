@@ -87,7 +87,8 @@ def api_snapshot():
 
 @app.get("/api/history")
 def api_history():
-    return jsonify(samples=storage.history())
+    range_key = request.args.get("range", "2h")
+    return jsonify(samples=storage.history(range_key))
 
 
 @app.get("/stream")

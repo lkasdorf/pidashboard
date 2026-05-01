@@ -192,6 +192,22 @@ button.pid-link {
 button.pid-link:hover { text-decoration-color: var(--accent); background: transparent; }
 button.pid-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
+/* ───────── range toggle (overview sparklines) ───────── */
+.range-toggle {
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  margin: 0 0 12px 0;
+}
+.range-btn {
+  background: transparent; color: var(--muted); border: none;
+  padding: 4px 10px; border-radius: 6px;
+  font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+.range-btn:hover { color: var(--fg); background: var(--panel-hi); }
+.range-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.range-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
 /* ───────── log sub-tabs ───────── */
 .tabs.subtabs {
   background: transparent; border: none; padding: 0;

@@ -19,6 +19,10 @@ LIVE_INTERVAL_SEC: float = 2.5
 HISTORY_INTERVAL_SEC: float = 30.0
 HISTORY_RETENTION_SEC: int = 2 * 60 * 60
 
+# Coarser, longer ringbuffer for trend views beyond the 2 h window.
+LONG_HISTORY_INTERVAL_SEC: float = 60.0
+LONG_HISTORY_RETENTION_SEC: int = 7 * 24 * 60 * 60
+
 DB_PATH: Path = Path(__file__).parent / "data" / "samples.db"
 
 CONTROLLABLE_SERVICES: list[str] = [
