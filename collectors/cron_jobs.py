@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import config
@@ -35,6 +36,49 @@ def _parse_schedule(spec: str) -> tuple[int | None, str]:
         if dow.isdigit():
             return 604800, f"weekly {_DOW_EN[int(dow) % 7]} {h:02d}:{m:02d}"
     return None, spec
+
+
+def _next_run(spec: str, now: datetime | None = None) -> float | None:
+    """Compute the next nominal Unix timestamp the schedule will fire.
+
+    Same pattern coverage as `_parse_schedule`. Returns None for unsupported
+    expressions. Local time, no DST awareness — close enough for a dashboard
+    that says "next: in 3m".
+    """
+    fields = spec.split()
+    if len(fields) != 5:
+        return None
+    minute, hour, dom, month, dow = fields
+    n = (now or datetime.now()).replace(microsecond=0)
+
+    if minute.startswith("*/") and hour == dom == month == dow == "*":
+        try:
+            step = int(minute[2:])
+        except ValueError:
+            return None
+        if step <= 0:
+            return None
+        rem = n.minute % step
+        delta_min = step - rem if rem > 0 or n.second > 0 else step
+        candidate = n.replace(second=0) + timedelta(minutes=delta_min)
+        return candidate.timestamp()
+
+    if minute.isdigit() and hour.isdigit() and dom == "*" and month == "*":
+        m, h = int(minute), int(hour)
+        candidate = n.replace(hour=h, minute=m, second=0)
+        if dow == "*":
+            if candidate <= n:
+                candidate += timedelta(days=1)
+            return candidate.timestamp()
+        if dow.isdigit():
+            cron_dow = int(dow) % 7        # 0 = Sun in cron
+            python_dow = (cron_dow - 1) % 7  # 0 = Mon in datetime
+            days_ahead = (python_dow - n.weekday()) % 7
+            if days_ahead == 0 and candidate <= n:
+                days_ahead = 7
+            return (candidate + timedelta(days=days_ahead)).timestamp()
+
+    return None
 
 
 def _tail(path: Path, lines: int) -> list[str]:
@@ -98,6 +142,7 @@ def collect_all() -> list[dict]:
                 "schedule": job["schedule"],
                 "schedule_human": schedule_human,
                 "interval_sec": interval_sec,
+                "next_run": _next_run(job["schedule"]),
                 "log": job["log"],
                 **_job_state(path),
             }

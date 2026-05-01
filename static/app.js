@@ -41,6 +41,16 @@ const fmtRelative = (ts) => {
   return `${Math.floor(diff / 86400)}d`;
 };
 
+const fmtFromNow = (ts) => {
+  if (!ts) return "–";
+  const diff = ts - Date.now() / 1000;
+  if (diff <= 0) return "now";
+  if (diff < 60) return `in ${Math.floor(diff)}s`;
+  if (diff < 3600) return `in ${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `in ${Math.floor(diff / 3600)}h`;
+  return `in ${Math.floor(diff / 86400)}d`;
+};
+
 const escapeHtml = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
@@ -170,12 +180,14 @@ function applySnapshot(snap) {
   refreshSparks();
   renderServices(snap.services);
   renderCron(snap.cron);
+  renderDocker(snap.docker || []);
   renderProcs(sys.top_processes);
   updateFavicon(sys.cpu.percent);
 
   conn.textContent = "live";
   conn.className = "conn on";
   updated.textContent = `updated ${new Date().toLocaleTimeString("en-GB")}`;
+  document.title = `${sys.cpu.percent.toFixed(0)}% · pidashboard`;
 }
 
 function dotForActive(active) {
@@ -235,10 +247,11 @@ function renderCron(items) {
     const scheduleCell = j.schedule_human !== j.schedule
       ? `<span title="${escapeHtml(j.schedule)}">${escapeHtml(j.schedule_human)}</span>`
       : `<code>${escapeHtml(j.schedule)}</code>`;
+    const nextSuffix = j.next_run ? `<br><span class="muted">next ${fmtFromNow(j.next_run)}</span>` : "";
     return `<tr>
       <td><code>${escapeHtml(j.name)}</code></td>
       <td>${scheduleCell}</td>
-      <td>${fmtRelative(j.last_run)}</td>
+      <td>${fmtRelative(j.last_run)}${nextSuffix}</td>
       <td title="${escapeHtml(statusTitle)}">${dot}${escapeHtml(statusText)}</td>
       <td><button class="show-log" data-job="${escapeHtml(j.name)}">open</button></td>
     </tr>`;
@@ -250,6 +263,28 @@ function renderProcs(items) {
   tbody.innerHTML = (items || []).map((p) =>
     `<tr><td>${p.pid}</td><td><code>${escapeHtml(p.name)}</code></td><td>${p.cpu.toFixed(1)}</td><td>${p.mem.toFixed(1)}</td></tr>`
   ).join("");
+}
+
+function renderDocker(items) {
+  const tbody = document.querySelector("#docker-table tbody");
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">no containers (or docker unreachable)</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((c) => {
+    const dot = c.state === "running"
+      ? '<span class="dot good"></span>'
+      : c.state === "exited" || c.state === "dead"
+        ? '<span class="dot bad"></span>'
+        : '<span class="dot muted"></span>';
+    return `<tr>
+      <td>${dot}<code>${escapeHtml(c.name)}</code></td>
+      <td><code>${escapeHtml(c.image)}</code></td>
+      <td>${escapeHtml(c.state)}</td>
+      <td>${escapeHtml(c.status)}</td>
+      <td><code>${escapeHtml(c.ports || "–")}</code></td>
+    </tr>`;
+  }).join("");
 }
 
 const THROTTLE_LABELS = {

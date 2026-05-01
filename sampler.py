@@ -10,6 +10,7 @@ import time
 import config
 import storage
 from collectors import cron_jobs as cron_coll
+from collectors import docker as docker_coll
 from collectors import services as svc_coll
 from collectors import system as sys_coll
 
@@ -67,6 +68,7 @@ def _build_snapshot() -> dict:
         "system": sys_coll.collect(),
         "services": svc_coll.collect_all(),
         "cron": cron_coll.collect_all(),
+        "docker": docker_coll.containers(),
     }
 
 
