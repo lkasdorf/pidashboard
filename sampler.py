@@ -15,6 +15,7 @@ import alerts
 import config
 import storage
 from collectors import cron_jobs as cron_coll
+from collectors import devices as dev_coll
 from collectors import docker as docker_coll
 from collectors import services as svc_coll
 from collectors import system as sys_coll
@@ -78,6 +79,7 @@ def _build_snapshot() -> dict:
         "cron": cron_coll.collect_all(),
         "timers": timer_coll.collect_all(),
         "docker": docker_coll.containers(),
+        "devices": dev_coll.status(),
     }
 
 
@@ -87,6 +89,23 @@ _THROTTLE_SEVERITY = {
     "arm_freq_capped": "warning",
     "soft_temp_limit": "warning",
 }
+
+
+def _track_device_transitions(prev: dict | None, devices: list[dict]) -> dict:
+    """Emit events for each up<->down flip. Returns the new state map for the
+    next tick. First sample is treated as a baseline (no events emitted)."""
+    new_state = {d["name"]: bool(d.get("ok")) for d in devices}
+    if prev is None:
+        return new_state
+    for name, ok_now in new_state.items():
+        ok_prev = prev.get(name)
+        if ok_prev is None:
+            continue
+        if ok_prev and not ok_now:
+            storage.record_event(kind=f"device.down.{name}", detail="unreachable", severity="warning")
+        elif ok_now and not ok_prev:
+            storage.record_event(kind=f"device.up.{name}", detail="recovered", severity="info")
+    return new_state
 
 
 def _track_throttle_transitions(prev: dict | None, curr: dict | None) -> dict | None:
@@ -124,6 +143,7 @@ def _loop() -> None:
     last_persist = 0.0
     last_persist_long = 0.0
     prev_throttle: dict | None = None
+    prev_devices: dict | None = None
     while True:
         try:
             snap = _build_snapshot()
@@ -139,6 +159,7 @@ def _loop() -> None:
                 storage.insert_proc(now, snap["system"].get("tracked_processes") or [])
                 last_persist_long = now
             prev_throttle = _track_throttle_transitions(prev_throttle, snap["system"].get("throttle"))
+            prev_devices = _track_device_transitions(prev_devices, snap.get("devices") or [])
             alerts.evaluate_and_dispatch(snap)
         except Exception as exc:
             print(f"[sampler] error: {exc}", flush=True)

@@ -251,6 +251,7 @@ function applySnapshot(snap) {
   renderDocker(snap.docker || []);
   renderProcs(sys.top_processes);
   renderTrackedProcs(sys.tracked_processes || []);
+  renderDevices(snap.devices || []);
   populateLogDropdowns(snap);
   updateFavicon(sys.cpu.percent);
 
@@ -364,6 +365,38 @@ function renderDocker(items) {
       <td>${escapeHtml(c.status)}</td>
       <td><code>${escapeHtml(c.ports || "–")}</code></td>
       <td><button class="show-docker-log" data-name="${escapeHtml(c.name)}">open</button></td>
+    </tr>`;
+  }).join("");
+}
+
+function renderDevices(items) {
+  const tbody = document.querySelector("#devices-table tbody");
+  if (!tbody) return;
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">no devices configured (config.WATCHED_DEVICES)</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((d) => {
+    const dot = d.ok
+      ? '<span class="dot good"></span>up'
+      : '<span class="dot bad"></span>down';
+    const latency = d.latency_ms != null ? `${d.latency_ms.toFixed(1)} ms` : "–";
+    let lastSeen;
+    if (d.ok) {
+      lastSeen = '<span class="muted">now</span>';
+    } else if (d.last_seen) {
+      lastSeen = `<span title="down: ${escapeHtml(d.error || "")}">${fmtRelative(d.last_seen)}</span>`;
+    } else {
+      lastSeen = `<span class="muted" title="${escapeHtml(d.error || "")}">never</span>`;
+    }
+    const portCell = d.method;
+    return `<tr>
+      <td>${dot}</td>
+      <td><code>${escapeHtml(d.name)}</code></td>
+      <td><code>${escapeHtml(d.host)}</code></td>
+      <td>${escapeHtml(portCell)}</td>
+      <td>${latency}</td>
+      <td>${lastSeen}</td>
     </tr>`;
   }).join("");
 }
@@ -1140,7 +1173,10 @@ async function fetchEvents() {
     }
     root.innerHTML = events.map((e) => {
       const sev = ["error", "warning", "info"].includes(e.severity) ? e.severity : "info";
-      const label = EVENT_LABELS[e.kind] || e.kind;
+      let label = EVENT_LABELS[e.kind] || e.kind;
+      // Pretty-print transient device events: "device.down.router" → "router down"
+      const m = /^device\.(up|down)\.(.+)$/.exec(e.kind);
+      if (m) label = `${m[2]} ${m[1]}`;
       return `<div class="event-row ${sev}">
         <span class="event-when">${escapeHtml(fmtEventTime(e.ts))}</span>
         <span class="event-kind">${escapeHtml(label)}</span>

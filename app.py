@@ -27,6 +27,7 @@ import sampler
 import storage
 from collectors import auth as auth_coll
 from collectors import cron_jobs as cron_coll
+from collectors import devices as dev_coll
 from collectors import docker as docker_coll
 from collectors import maintenance as maint_coll
 from collectors import network as net_coll
@@ -276,6 +277,7 @@ def main() -> None:
     storage.init()
     sampler.start()
     maint_coll.start()
+    dev_coll.start()
 
     if args.debug:
         app.run(host=args.host, port=args.port, debug=True, threaded=True, use_reloader=False)

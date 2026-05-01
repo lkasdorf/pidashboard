@@ -70,6 +70,17 @@ TRACKED_PROCESSES: list[str] = [
     "dockerd",
 ]
 
+# LAN/Tailnet devices probed every 30 s by collectors/devices.py.
+# method: "ping" | "tcp" | "http" | "https"  (tcp is the default and most
+# reliable for embedded firmware that may have ICMP disabled).
+# `port` is required for tcp; optional for http/https (defaults to 80/443).
+# Examples — uncomment + adapt to your network:
+#     {"name": "router",     "host": "192.168.0.1",   "method": "http"},
+#     {"name": "tasmota-1",  "host": "192.168.0.42",  "method": "tcp", "port": 80},
+#     {"name": "shelly-pm",  "host": "192.168.0.55",  "method": "http"},
+#     {"name": "uplink",     "host": "1.1.1.1",       "method": "ping"},
+WATCHED_DEVICES: list[dict] = []
+
 # Alert channels — leave empty to evaluate rules silently (Overview events
 # panel still shows fired alerts). To get push notifications, add e.g.:
 #   {"type": "ntfy", "url": "https://ntfy.sh/<random-hard-to-guess-topic>"}
