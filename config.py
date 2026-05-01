@@ -74,12 +74,19 @@ TRACKED_PROCESSES: list[str] = [
 # method: "ping" | "tcp" | "http" | "https"  (tcp is the default and most
 # reliable for embedded firmware that may have ICMP disabled).
 # `port` is required for tcp; optional for http/https (defaults to 80/443).
+# `verify_tls` defaults to False — reachability is the goal, not authenticity,
+# so self-signed certs on a NAS/router don't count as "down". Set to True for
+# public endpoints where cert validity actually matters.
 # Examples — uncomment + adapt to your network:
 #     {"name": "router",     "host": "192.168.0.1",   "method": "http"},
 #     {"name": "tasmota-1",  "host": "192.168.0.42",  "method": "tcp", "port": 80},
 #     {"name": "shelly-pm",  "host": "192.168.0.55",  "method": "http"},
 #     {"name": "uplink",     "host": "1.1.1.1",       "method": "ping"},
-WATCHED_DEVICES: list[dict] = []
+WATCHED_DEVICES: list[dict] = [
+    {"name": "router",     "host": "192.168.0.1",   "method": "http"},
+    {"name": "synology",   "host": "192.168.0.2",   "method": "https", "port": 443},
+    {"name": "gw-223",     "host": "192.168.223.1", "method": "http"},
+]
 
 # Alert channels — leave empty to evaluate rules silently (Overview events
 # panel still shows fired alerts). To get push notifications, add e.g.:

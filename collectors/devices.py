@@ -17,6 +17,7 @@ Three probe methods:
 from __future__ import annotations
 
 import socket
+import ssl
 import subprocess
 import threading
 import time
@@ -29,6 +30,12 @@ import config
 REFRESH_INTERVAL_SEC = 30.0
 DEFAULT_TIMEOUT_SEC = 2.0
 DEFAULT_TCP_PORT = 80
+
+# Reachability is the goal, not authenticity — a NAS with a self-signed cert
+# is still "up". Opt back into verification per device with `"verify_tls": True`.
+_INSECURE_TLS = ssl.create_default_context()
+_INSECURE_TLS.check_hostname = False
+_INSECURE_TLS.verify_mode = ssl.CERT_NONE
 
 _cache_lock = threading.Lock()
 _cache: list[dict] = []  # populated by _refresh_loop with one dict per WATCHED_DEVICES entry
@@ -67,13 +74,14 @@ def _probe_tcp(host: str, port: int, timeout: float) -> tuple[bool, float | None
         return False, None, type(exc).__name__
 
 
-def _probe_http(host: str, port: int | None, timeout: float, scheme: str = "http") -> tuple[bool, float | None, str | None]:
+def _probe_http(host: str, port: int | None, timeout: float, scheme: str, verify_tls: bool) -> tuple[bool, float | None, str | None]:
     netloc = host if not port or (scheme == "http" and port == 80) or (scheme == "https" and port == 443) else f"{host}:{port}"
     url = f"{scheme}://{netloc}/"
+    ctx = None if (scheme != "https" or verify_tls) else _INSECURE_TLS
     t0 = time.monotonic()
     try:
         req = urllib.request.Request(url, method="HEAD")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
             ok = 200 <= resp.status < 400
             return ok, (time.monotonic() - t0) * 1000.0, (None if ok else f"http {resp.status}")
     except urllib.error.HTTPError as exc:
@@ -88,12 +96,13 @@ def _probe_one(spec: dict) -> dict:
     host = spec["host"]
     method = (spec.get("method") or "tcp").lower()
     timeout = float(spec.get("timeout") or DEFAULT_TIMEOUT_SEC)
+    verify_tls = bool(spec.get("verify_tls", False))
     if method == "ping":
         ok, rtt, err = _probe_ping(host, timeout)
     elif method == "http":
-        ok, rtt, err = _probe_http(host, spec.get("port"), timeout, "http")
+        ok, rtt, err = _probe_http(host, spec.get("port"), timeout, "http", verify_tls)
     elif method == "https":
-        ok, rtt, err = _probe_http(host, spec.get("port"), timeout, "https")
+        ok, rtt, err = _probe_http(host, spec.get("port"), timeout, "https", verify_tls)
     else:  # tcp default
         ok, rtt, err = _probe_tcp(host, int(spec.get("port") or DEFAULT_TCP_PORT), timeout)
     return {
