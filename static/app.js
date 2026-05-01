@@ -215,6 +215,7 @@ function applySnapshot(snap) {
   renderTimers(snap.timers || []);
   renderDocker(snap.docker || []);
   renderProcs(sys.top_processes);
+  renderTrackedProcs(sys.tracked_processes || []);
   populateLogDropdowns(snap);
   updateFavicon(sys.cpu.percent);
 
@@ -1025,6 +1026,53 @@ function updateFavicon(cpuPercent) {
   faviconEl.href = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+// ───────── tracked processes (overview) ─────────
+const trackedProcsRoot = document.getElementById("tracked-procs-list");
+const procHistoryCache = {};  // name -> [cpu values]
+
+function renderTrackedProcs(items) {
+  if (!trackedProcsRoot) return;
+  if (!items.length) {
+    trackedProcsRoot.innerHTML = '<span class="muted">no processes configured (config.TRACKED_PROCESSES)</span>';
+    return;
+  }
+  trackedProcsRoot.innerHTML = items.map((p) => {
+    const absent = p.count === 0;
+    const stats = absent
+      ? "not running"
+      : `${p.cpu.toFixed(1)}% CPU · ${p.mem.toFixed(1)}% MEM · ${p.count} PID${p.count === 1 ? "" : "s"}`;
+    return `<div class="tracked-row${absent ? " absent" : ""}">
+      <span class="tp-name"><code>${escapeHtml(p.name)}</code></span>
+      <span class="tp-stats">${stats}</span>
+      <canvas data-proc="${escapeHtml(p.name)}"></canvas>
+    </div>`;
+  }).join("");
+  // Lazy-load history for any proc we haven't fetched yet, then redraw.
+  for (const item of items) fetchProcHistory(item.name);
+  redrawTrackedSparks();
+}
+
+async function fetchProcHistory(name) {
+  if (procHistoryCache[name] !== undefined) return;
+  procHistoryCache[name] = [];  // mark in-flight to avoid duplicate fetches
+  try {
+    const r = await fetch(`${BASE}/api/proc_history?name=${encodeURIComponent(name)}`);
+    const d = await r.json();
+    procHistoryCache[name] = (d.samples || []).map((s) => s.cpu || 0);
+    redrawTrackedSparks();
+  } catch (_) {
+    delete procHistoryCache[name];
+  }
+}
+
+function redrawTrackedSparks() {
+  if (!trackedProcsRoot) return;
+  trackedProcsRoot.querySelectorAll("canvas").forEach((c) => {
+    const data = procHistoryCache[c.dataset.proc] || [];
+    drawSpark(c, data, { color: "#a78bfa", min: 0 });
+  });
+}
+
 // ───────── recent events (overview) ─────────
 const EVENT_LABELS = {
   "throttle.undervoltage":    "Undervoltage",
@@ -1099,3 +1147,6 @@ fetchEvents();
 setInterval(fetchEvents, 60000);
 fetchAlerts();
 setInterval(fetchAlerts, 15000);
+// Drop the per-proc history cache once a minute so the lazy-fetch on the
+// next render picks up fresh long-history samples.
+setInterval(() => { for (const k of Object.keys(procHistoryCache)) delete procHistoryCache[k]; }, 60000);

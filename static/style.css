@@ -192,6 +192,19 @@ button.pid-link {
 button.pid-link:hover { text-decoration-color: var(--accent); background: transparent; }
 button.pid-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
+/* ───────── tracked processes (overview) ───────── */
+.tracked-procs { display: flex; flex-direction: column; gap: 6px; }
+.tracked-row {
+  display: grid; grid-template-columns: minmax(120px, 1.5fr) 1fr 2fr;
+  gap: 12px; align-items: center;
+  padding: 6px 8px; background: var(--panel-hi); border-radius: 4px;
+  font-size: 12px;
+}
+.tracked-row .tp-name { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; }
+.tracked-row.absent { opacity: 0.5; }
+.tracked-row .tp-stats { color: var(--muted); }
+.tracked-row canvas { width: 100%; height: 28px; display: block; }
+
 /* ───────── auth summary ───────── */
 .auth-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .auth-col h3 { margin: 0 0 6px 0; font-size: 13px; font-weight: 600; }

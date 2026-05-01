@@ -68,6 +68,18 @@ def init() -> None:
         )
         """
     )
+    _conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS proc_samples_long (
+            ts          REAL NOT NULL,
+            name        TEXT NOT NULL,
+            cpu_percent REAL,
+            mem_percent REAL,
+            count       INTEGER,
+            PRIMARY KEY (ts, name)
+        )
+        """
+    )
     _conn.commit()
 
 
@@ -99,6 +111,36 @@ def net_history(iface: str) -> list[dict]:
             (iface, cutoff),
         ).fetchall()
     return [{"ts": r[0], "rx": r[1], "tx": r[2]} for r in rows]
+
+
+def insert_proc(ts: float, samples: list[dict]) -> None:
+    if _conn is None or not samples:
+        return
+    rows = [
+        (ts, s["name"], s.get("cpu", 0.0), s.get("mem", 0.0), s.get("count", 0))
+        for s in samples
+    ]
+    with _lock:
+        _conn.executemany(
+            "INSERT OR REPLACE INTO proc_samples_long VALUES (?,?,?,?,?)",
+            rows,
+        )
+        cutoff = time.time() - config.LONG_HISTORY_RETENTION_SEC
+        _conn.execute("DELETE FROM proc_samples_long WHERE ts < ?", (cutoff,))
+        _conn.commit()
+
+
+def proc_history(name: str) -> list[dict]:
+    if _conn is None:
+        return []
+    cutoff = time.time() - config.LONG_HISTORY_RETENTION_SEC
+    with _lock:
+        rows = _conn.execute(
+            "SELECT ts, cpu_percent, mem_percent, count FROM proc_samples_long "
+            "WHERE name = ? AND ts >= ? ORDER BY ts ASC",
+            (name, cutoff),
+        ).fetchall()
+    return [{"ts": r[0], "cpu": r[1], "mem": r[2], "count": r[3]} for r in rows]
 
 
 def net_ifaces_with_history() -> list[str]:

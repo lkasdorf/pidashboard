@@ -199,6 +199,34 @@ def process_info(pid: int) -> dict | None:
         }
 
 
+def tracked_processes(names: list[str]) -> list[dict]:
+    """Sum CPU%/MEM% across every PID matching one of `names`. A name matches
+    if it equals the process executable name (psutil.Process.name()) OR appears
+    as a substring of any argv element — this catches Python services like
+    `python3 -m pidashboard` whose exe name is just "python3".
+    Returns one entry per requested name (with count=0 when no match) so the
+    history has stable series identifiers across restarts."""
+    if not names:
+        return []
+    by_name: dict[str, dict] = {n: {"name": n, "cpu": 0.0, "mem": 0.0, "count": 0, "pids": []} for n in names}
+    for p in psutil.process_iter(["pid", "name", "cmdline", "cpu_percent", "memory_percent"]):
+        info = p.info
+        proc_name = info.get("name") or ""
+        cmdline = info.get("cmdline") or []
+        cmdline_blob = " ".join(cmdline)
+        for wanted in names:
+            if wanted == proc_name or (wanted and wanted in cmdline_blob):
+                by_name[wanted]["cpu"] += info.get("cpu_percent") or 0.0
+                by_name[wanted]["mem"] += info.get("memory_percent") or 0.0
+                by_name[wanted]["count"] += 1
+                by_name[wanted]["pids"].append(info.get("pid"))
+                break  # avoid double-counting one PID under two names
+    for entry in by_name.values():
+        entry["cpu"] = round(entry["cpu"], 1)
+        entry["mem"] = round(entry["mem"], 1)
+    return list(by_name.values())
+
+
 def _top_processes(n: int) -> list[dict]:
     procs: list[dict] = []
     for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):
@@ -256,4 +284,5 @@ def collect() -> dict:
         "temp_c": _read_temp_c(),
         "uptime_sec": time.time() - boot,
         "top_processes": _top_processes(config.TOP_PROCESS_COUNT),
+        "tracked_processes": tracked_processes(getattr(config, "TRACKED_PROCESSES", []) or []),
     }

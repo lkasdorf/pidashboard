@@ -60,6 +60,16 @@ CRON_ERROR_PATTERNS: tuple[str, ...] = (
 
 TOP_PROCESS_COUNT: int = 5
 
+# Process names tracked over the long-history window (7 d at 60 s resolution).
+# Matched by `psutil.Process.name()`. CPU/MEM is summed across all matching PIDs
+# so a name with several worker children appears as one aggregated series.
+TRACKED_PROCESSES: list[str] = [
+    "financeos",
+    "pidashboard",
+    "tailscaled",
+    "dockerd",
+]
+
 # Alert channels — leave empty to evaluate rules silently (Overview events
 # panel still shows fired alerts). To get push notifications, add e.g.:
 #   {"type": "ntfy", "url": "https://ntfy.sh/<random-hard-to-guess-topic>"}

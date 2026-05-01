@@ -136,6 +136,7 @@ def _loop() -> None:
             if now - last_persist_long >= config.LONG_HISTORY_INTERVAL_SEC:
                 storage.insert_long(snap["system"])
                 storage.insert_net(now, _net_samples())
+                storage.insert_proc(now, snap["system"].get("tracked_processes") or [])
                 last_persist_long = now
             prev_throttle = _track_throttle_transitions(prev_throttle, snap["system"].get("throttle"))
             alerts.evaluate_and_dispatch(snap)

@@ -199,6 +199,14 @@ def api_net_history():
     return jsonify(iface=iface, samples=storage.net_history(iface))
 
 
+@app.get("/api/proc_history")
+def api_proc_history():
+    name = request.args.get("name", "")
+    if not name:
+        return jsonify(names=getattr(config, "TRACKED_PROCESSES", []) or [])
+    return jsonify(name=name, samples=storage.proc_history(name))
+
+
 @app.get("/api/process/<int:pid>")
 def api_process(pid: int):
     info = sys_coll.process_info(pid)
