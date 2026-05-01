@@ -26,6 +26,7 @@ from collectors import cron_jobs as cron_coll
 from collectors import maintenance as maint_coll
 from collectors import network as net_coll
 from collectors import services as svc_coll
+from collectors import system as sys_coll
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
@@ -154,6 +155,14 @@ def api_network():
 @app.get("/api/maintenance")
 def api_maintenance():
     return jsonify(maint_coll.status())
+
+
+@app.get("/api/process/<int:pid>")
+def api_process(pid: int):
+    info = sys_coll.process_info(pid)
+    if info is None:
+        return jsonify(error="not found"), 404
+    return jsonify(info)
 
 
 def main() -> None:

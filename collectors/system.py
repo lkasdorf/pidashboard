@@ -96,6 +96,35 @@ def _disks() -> list[dict]:
     return out
 
 
+def _safe(fn, default=None):
+    try:
+        return fn()
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        return default
+
+
+def process_info(pid: int) -> dict | None:
+    try:
+        p = psutil.Process(pid)
+    except psutil.NoSuchProcess:
+        return None
+    with p.oneshot():
+        cmdline = _safe(p.cmdline) or []
+        return {
+            "pid": pid,
+            "name": _safe(p.name) or "",
+            "cmdline": " ".join(cmdline) if cmdline else None,
+            "exe": _safe(p.exe),
+            "cwd": _safe(p.cwd),
+            "username": _safe(p.username),
+            "status": _safe(p.status),
+            "create_time": _safe(p.create_time),
+            "num_threads": _safe(p.num_threads),
+            "memory_percent": _safe(p.memory_percent),
+            "cpu_percent": _safe(p.cpu_percent),
+        }
+
+
 def _top_processes(n: int) -> list[dict]:
     procs: list[dict] = []
     for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):

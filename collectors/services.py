@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import subprocess
 
+import psutil
+
 import config
 
 
@@ -27,7 +29,7 @@ def status(unit: str) -> dict:
             "systemctl",
             "show",
             unit,
-            "--property=ActiveEnterTimestamp,SubState,MainPID,LoadState",
+            "--property=ActiveEnterTimestamp,ActiveEnterTimestampMonotonic,SubState,MainPID,LoadState",
         ]
     )
     props: dict[str, str] = {}
@@ -35,6 +37,13 @@ def status(unit: str) -> dict:
         if "=" in line:
             k, v = line.split("=", 1)
             props[k] = v
+    active_since_ts: float | None = None
+    mono = props.get("ActiveEnterTimestampMonotonic", "")
+    if mono and mono != "0":
+        try:
+            active_since_ts = psutil.boot_time() + int(mono) / 1e6
+        except ValueError:
+            pass
     return {
         "unit": unit,
         "active": active,
@@ -42,6 +51,7 @@ def status(unit: str) -> dict:
         "sub_state": props.get("SubState", ""),
         "main_pid": props.get("MainPID", ""),
         "active_since": props.get("ActiveEnterTimestamp", ""),
+        "active_since_ts": active_since_ts,
         "load_state": props.get("LoadState", ""),
     }
 

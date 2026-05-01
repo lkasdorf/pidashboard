@@ -201,9 +201,13 @@ function renderServices(items) {
   const tbody = document.querySelector("#services-table tbody");
   const controllable = new Set(window.PIDASH.controllable);
   tbody.innerHTML = items.map((s) => {
-    const since = s.active_since && s.active_since !== "" && s.active_since !== "n/a"
-      ? s.active_since.replace(/^[A-Za-z]+ /, "")
-      : "–";
+    let sinceCell = "–";
+    if (s.active_since_ts) {
+      const original = (s.active_since || "").replace(/^[A-Za-z]+ /, "");
+      sinceCell = `<span title="${escapeHtml(original)}">${fmtRelative(s.active_since_ts)}</span>`;
+    } else if (s.active_since && s.active_since !== "n/a") {
+      sinceCell = escapeHtml(s.active_since.replace(/^[A-Za-z]+ /, ""));
+    }
     const ctrlButtons = controllable.has(s.unit)
       ? window.PIDASH.actions.map((a) =>
           `<button class="act${a === "stop" ? " danger" : ""}" data-unit="${escapeHtml(s.unit)}" data-action="${a}">${a}</button>`
@@ -214,8 +218,8 @@ function renderServices(items) {
       <td>${dotForActive(s.active)}<code>${escapeHtml(s.unit)}</code></td>
       <td>${escapeHtml(s.active)}</td>
       <td>${escapeHtml(s.sub_state || "–")}</td>
-      <td>${s.main_pid && s.main_pid !== "0" ? escapeHtml(s.main_pid) : "–"}</td>
-      <td>${escapeHtml(since)}</td>
+      <td>${s.main_pid && s.main_pid !== "0" ? `<button class="pid-link" data-pid="${escapeHtml(s.main_pid)}">${escapeHtml(s.main_pid)}</button>` : "–"}</td>
+      <td>${sinceCell}</td>
       <td>${ctrlButtons}${ctrlButtons ? " " : ""}${logButton}</td>
     </tr>`;
   }).join("");
@@ -261,7 +265,7 @@ function renderCron(items) {
 function renderProcs(items) {
   const tbody = document.querySelector("#proc-table tbody");
   tbody.innerHTML = (items || []).map((p) =>
-    `<tr><td>${p.pid}</td><td><code>${escapeHtml(p.name)}</code></td><td>${p.cpu.toFixed(1)}</td><td>${p.mem.toFixed(1)}</td></tr>`
+    `<tr><td><button class="pid-link" data-pid="${p.pid}">${p.pid}</button></td><td><code>${escapeHtml(p.name)}</code></td><td>${p.cpu.toFixed(1)}</td><td>${p.mem.toFixed(1)}</td></tr>`
   ).join("");
 }
 
@@ -346,21 +350,29 @@ async function fetchMaintenance() {
 function renderMaintenance(m) {
   if (!maintPill) return;
   const reboot = m.reboot && m.reboot.required;
-  const updates = m.updates && m.updates.count;
+  const updates = (m.updates && m.updates.count) || 0;
+  const checkedAt = m.updates && m.updates.checked_at;
+  const ageStr = checkedAt
+    ? `checked ${fmtRelative(checkedAt)} ago`
+    : "checking …";
+
   const parts = [];
   if (reboot) parts.push("Reboot needed");
-  if (updates && updates > 0) parts.push(`${updates} update${updates === 1 ? "" : "s"}`);
-  if (parts.length === 0) {
-    maintPill.hidden = true;
-    return;
-  }
+  if (updates > 0) parts.push(`${updates} update${updates === 1 ? "" : "s"}`);
+
+  let cls;
+  if (reboot) cls = "bad";
+  else if (updates > 0) cls = "warn";
+  else { cls = "muted"; parts.push("system clean"); }
+  parts.push(ageStr);
+
   maintPill.hidden = false;
   maintPill.textContent = parts.join(" · ");
-  maintPill.className = "pill " + (reboot ? "bad" : "warn");
+  maintPill.className = "pill " + cls;
   const pkgs = (m.reboot && m.reboot.packages) || [];
   maintPill.title = pkgs.length
     ? `Reboot due to: ${pkgs.join(", ")}`
-    : (updates ? "apt list --upgradable reported packages" : "");
+    : (updates > 0 ? "apt list --upgradable reported packages" : "apt list --upgradable refreshed hourly");
 }
 
 // ───────── service controls ─────────
@@ -406,6 +418,45 @@ async function openLogModal(title, url) {
     logBody.textContent = `Error: ${e}`;
   }
 }
+
+async function openProcessModal(pid) {
+  logTitle.textContent = `pid ${pid}`;
+  logBody.textContent = "loading …";
+  modal.showModal();
+  try {
+    const r = await fetch(`${BASE}/api/process/${pid}`);
+    if (r.status === 404) {
+      logBody.textContent = `pid ${pid}: process not found (already exited?)`;
+      return;
+    }
+    const d = await r.json();
+    const fmt = (k, v) => v == null ? "" : `${k.padEnd(14)} ${v}\n`;
+    const created = d.create_time ? new Date(d.create_time * 1000).toISOString().replace("T", " ").slice(0, 19) : null;
+    const ageStr = d.create_time ? `(${fmtRelative(d.create_time)} ago)` : "";
+    logBody.textContent =
+      fmt("pid", d.pid) +
+      fmt("name", d.name) +
+      fmt("status", d.status) +
+      fmt("user", d.username) +
+      fmt("started", created ? `${created} ${ageStr}` : null) +
+      fmt("threads", d.num_threads) +
+      fmt("cpu %", d.cpu_percent != null ? d.cpu_percent.toFixed(1) : null) +
+      fmt("mem %", d.memory_percent != null ? d.memory_percent.toFixed(1) : null) +
+      fmt("exe", d.exe) +
+      fmt("cwd", d.cwd) +
+      "\ncmdline:\n" + (d.cmdline || "(unavailable)");
+    logBody.scrollTop = 0;
+  } catch (e) {
+    logBody.textContent = `Error: ${e}`;
+  }
+}
+
+document.body.addEventListener("click", (ev) => {
+  const pidBtn = ev.target.closest("button.pid-link");
+  if (!pidBtn) return;
+  ev.stopPropagation();
+  openProcessModal(pidBtn.dataset.pid);
+});
 
 document.querySelector("#cron-table").addEventListener("click", (ev) => {
   const btn = ev.target.closest("button.show-log");
@@ -567,7 +618,7 @@ function renderSockets(sockets) {
       <td><code>${escapeHtml(s.proto)}</code></td>
       <td><code>${escapeHtml(s.addr)}</code></td>
       <td>${s.port}</td>
-      <td>${s.process ? `<code>${escapeHtml(s.process)}</code>${s.pid ? ` <span class="muted">pid ${s.pid}</span>` : ""}` : '<span class="muted">–</span>'}</td>
+      <td>${s.process ? `<code>${escapeHtml(s.process)}</code>${s.pid ? ` <button class="pid-link" data-pid="${s.pid}">pid ${s.pid}</button>` : ""}` : '<span class="muted">–</span>'}</td>
     </tr>`).join("");
 }
 
