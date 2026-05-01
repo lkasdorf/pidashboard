@@ -192,6 +192,18 @@ button.pid-link {
 button.pid-link:hover { text-decoration-color: var(--accent); background: transparent; }
 button.pid-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
+/* ───────── events list (overview) ───────── */
+.events-list { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.event-row {
+  display: grid; grid-template-columns: 14ch 1fr auto; gap: 10px; align-items: baseline;
+  padding: 4px 8px; border-radius: 4px; background: var(--panel-hi);
+}
+.event-row.error   { border-left: 2px solid #ef4444; }
+.event-row.warning { border-left: 2px solid #fbbf24; }
+.event-row.info    { border-left: 2px solid var(--accent); }
+.event-row .event-kind { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; }
+.event-row .event-when { color: var(--muted); white-space: nowrap; }
+
 /* ───────── range toggle (overview sparklines) ───────── */
 .range-toggle {
   display: inline-flex; gap: 2px; padding: 3px;

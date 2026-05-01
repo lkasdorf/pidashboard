@@ -203,6 +203,7 @@ function applySnapshot(snap) {
 
   renderThrottle(sys.throttle);
   renderDisks(sys.disks || []);
+  renderStorage(sys.storage_health || []);
 
   setMetric("uptime-val", fmtUptime(sys.uptime_sec));
   document.getElementById("swap-foot").textContent =
@@ -349,6 +350,37 @@ function renderThrottle(t) {
   footEl.textContent = bootFlags.length
     ? `since boot: ${bootFlags.join(", ")}`
     : "since boot: clean";
+}
+
+function renderStorage(items) {
+  const valEl = document.getElementById("storage-val");
+  const footEl = document.getElementById("storage-foot");
+  if (!valEl) return;
+  if (!items.length) {
+    valEl.textContent = "n/a";
+    valEl.className = "value small";
+    footEl.textContent = "no eMMC/SD/NVMe found";
+    return;
+  }
+  // Show worst-of in the value cell, list-of devices in the foot.
+  const wear = items.map((d) => d.life_used_pct).filter((v) => v != null);
+  const worstWear = wear.length ? Math.max(...wear) : null;
+  const eolBad = items.some((d) => d.pre_eol === "warning" || d.pre_eol === "urgent");
+  if (worstWear != null) {
+    valEl.textContent = `${worstWear}% used`;
+    valEl.className = "value small" + (worstWear >= 80 || eolBad ? " bad" : worstWear >= 50 ? " warn" : " good");
+  } else {
+    valEl.textContent = "no wear data";
+    valEl.className = "value small";
+  }
+  footEl.innerHTML = items.map((d) => {
+    const parts = [`<code>${escapeHtml(d.device)}</code>`];
+    if (d.model) parts.push(escapeHtml(d.model));
+    if (d.life_used_pct != null) parts.push(`life ${d.life_used_pct}%`);
+    if (d.pre_eol) parts.push(`EOL: ${escapeHtml(d.pre_eol)}`);
+    if (d.bytes_written_since_boot != null) parts.push(`${fmtBytes(d.bytes_written_since_boot)} since boot`);
+    return parts.join(" · ");
+  }).join("<br>");
 }
 
 function renderDisks(disks) {
@@ -510,7 +542,7 @@ function activateTab(name) {
     p.hidden = p.dataset.panel !== name;
   });
   if (name === "network") startNetworkPolling(); else stopNetworkPolling();
-  if (name === "overview") refreshSparks();
+  if (name === "overview") { refreshSparks(); fetchEvents(); }
   if (name === "logs") fetchActiveSubtab();
 }
 
@@ -782,6 +814,44 @@ function updateFavicon(cpuPercent) {
   faviconEl.href = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+// ───────── recent events (overview) ─────────
+const EVENT_LABELS = {
+  "throttle.undervoltage":    "Undervoltage",
+  "throttle.throttled":       "Throttled",
+  "throttle.arm_freq_capped": "ARM freq capped",
+  "throttle.soft_temp_limit": "Soft temp limit",
+};
+function fmtEventTime(ts) {
+  const d = new Date(ts * 1000);
+  const now = Date.now();
+  const ageDays = (now - d.getTime()) / 86400000;
+  if (ageDays < 1) return d.toLocaleTimeString("en-GB");
+  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+async function fetchEvents() {
+  const root = document.getElementById("events-list");
+  if (!root) return;
+  try {
+    const r = await fetch(`${BASE}/api/events?limit=50`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const events = d.events || [];
+    if (!events.length) {
+      root.innerHTML = '<span class="muted">no events recorded yet</span>';
+      return;
+    }
+    root.innerHTML = events.map((e) => {
+      const sev = ["error", "warning", "info"].includes(e.severity) ? e.severity : "info";
+      const label = EVENT_LABELS[e.kind] || e.kind;
+      return `<div class="event-row ${sev}">
+        <span class="event-when">${escapeHtml(fmtEventTime(e.ts))}</span>
+        <span class="event-kind">${escapeHtml(label)}</span>
+        <span class="muted">${escapeHtml(e.detail || "")}</span>
+      </div>`;
+    }).join("");
+  } catch (_) {}
+}
+
 // ───────── boot ─────────
 async function loadHistory() {
   try {
@@ -814,3 +884,5 @@ activateTab((location.hash || "#overview").slice(1));
 loadHistory().then(connect);
 fetchMaintenance();
 maintTimer = setInterval(fetchMaintenance, 60000);
+fetchEvents();
+setInterval(fetchEvents, 60000);

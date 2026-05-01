@@ -54,6 +54,10 @@
       <div class="card-head"><h2>Uptime</h2><span class="value" id="uptime-val">–</span></div>
       <div class="card-foot muted" id="swap-foot">swap: –</div>
     </div>
+    <div class="card" data-metric="storage">
+      <div class="card-head"><h2>Storage</h2><span class="value small" id="storage-val">–</span></div>
+      <div class="card-foot muted" id="storage-foot">SD/eMMC</div>
+    </div>
   </div>
 
   <section class="panel">
@@ -67,6 +71,13 @@
       <thead><tr><th>PID</th><th>Name</th><th>CPU%</th><th>MEM%</th></tr></thead>
       <tbody></tbody>
     </table>
+  </section>
+
+  <section class="panel">
+    <h2>Recent events <span class="muted">(throttle, undervoltage, …)</span></h2>
+    <div id="events-list" class="events-list">
+      <span class="muted">no events recorded yet</span>
+    </div>
   </section>
 </section>
 

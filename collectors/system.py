@@ -70,6 +70,80 @@ def _throttle_status() -> dict | None:
     }
 
 
+def _read_text(path: str) -> str | None:
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except (OSError, ValueError):
+        return None
+
+
+def _parse_life_time(raw: str | None) -> int | None:
+    """Translate the eMMC EXT_CSD `life_time` pair to a worst-case 0-100 % wear estimate.
+
+    Format is two hex values like "0x01 0x01" (Type A / Type B regions). Each
+    bucket = ~10 % of rated lifetime; 0x0b means "exceeded". We return the
+    higher of the two, mapped to a percent. Returns None for SD cards that
+    don't expose the attribute.
+    """
+    if not raw:
+        return None
+    try:
+        parts = [int(x, 16) for x in raw.split() if x]
+    except ValueError:
+        return None
+    if not parts:
+        return None
+    bucket = max(parts)
+    if bucket == 0 or bucket > 0x0b:
+        return None
+    if bucket == 0x0b:
+        return 100
+    return min(100, bucket * 10)
+
+
+def _storage_health() -> list[dict]:
+    """Per-block-device wear/write metrics. eMMC exposes life_time/pre_eol_info;
+    SD cards don't, in which case we still return write totals from /sys stat."""
+    out: list[dict] = []
+    try:
+        names = sorted(os.listdir("/sys/block"))
+    except OSError:
+        return out
+    for name in names:
+        if not (name.startswith("mmcblk") or name.startswith("sd") or name.startswith("nvme")):
+            continue
+        # Skip partitions / loop / dm devices already filtered above.
+        base = f"/sys/block/{name}"
+        stat = _read_text(f"{base}/stat")
+        sectors_written: int | None = None
+        if stat:
+            fields = stat.split()
+            if len(fields) >= 7:
+                try:
+                    sectors_written = int(fields[6])
+                except ValueError:
+                    pass
+        life_pct = _parse_life_time(_read_text(f"{base}/device/life_time"))
+        pre_eol_raw = _read_text(f"{base}/device/pre_eol_info")
+        pre_eol = None
+        if pre_eol_raw:
+            pre_eol_map = {"0x01": "normal", "0x02": "warning", "0x03": "urgent"}
+            pre_eol = pre_eol_map.get(pre_eol_raw.strip())
+        model = _read_text(f"{base}/device/name") or _read_text(f"{base}/device/model")
+        # Skip devices we can't say anything useful about.
+        if sectors_written is None and life_pct is None:
+            continue
+        out.append({
+            "device": f"/dev/{name}",
+            "model": model,
+            "bytes_written_since_boot": (sectors_written * 512) if sectors_written is not None else None,
+            "life_used_pct": life_pct,
+            "pre_eol": pre_eol,
+        })
+    return out
+
+
 def _disks() -> list[dict]:
     out: list[dict] = []
     seen: set[str] = set()
@@ -177,6 +251,7 @@ def collect() -> dict:
             "percent": du.percent,
         },
         "disks": disks,
+        "storage_health": _storage_health(),
         "throttle": _throttle_status(),
         "temp_c": _read_temp_c(),
         "uptime_sec": time.time() - boot,

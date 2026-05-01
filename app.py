@@ -91,6 +91,15 @@ def api_history():
     return jsonify(samples=storage.history(range_key))
 
 
+@app.get("/api/events")
+def api_events():
+    try:
+        limit = max(1, min(500, int(request.args.get("limit", 50))))
+    except ValueError:
+        limit = 50
+    return jsonify(events=storage.recent_events(limit))
+
+
 @app.get("/stream")
 def stream():
     q = sampler.subscribe()

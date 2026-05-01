@@ -46,7 +46,43 @@ def init() -> None:
     _conn = sqlite3.connect(str(config.DB_PATH), check_same_thread=False)
     _conn.execute(_create("samples"))
     _conn.execute(_create("samples_long"))
+    _conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS events (
+            ts       REAL NOT NULL,
+            kind     TEXT NOT NULL,
+            detail   TEXT,
+            severity TEXT
+        )
+        """
+    )
+    _conn.execute("CREATE INDEX IF NOT EXISTS events_ts ON events (ts)")
     _conn.commit()
+
+
+def record_event(kind: str, detail: str = "", severity: str = "info") -> None:
+    if _conn is None:
+        return
+    with _lock:
+        _conn.execute(
+            "INSERT INTO events (ts, kind, detail, severity) VALUES (?,?,?,?)",
+            (time.time(), kind, detail, severity),
+        )
+        # Keep events for the same window as the long history.
+        cutoff = time.time() - config.LONG_HISTORY_RETENTION_SEC
+        _conn.execute("DELETE FROM events WHERE ts < ?", (cutoff,))
+        _conn.commit()
+
+
+def recent_events(limit: int = 100) -> list[dict]:
+    if _conn is None:
+        return []
+    with _lock:
+        rows = _conn.execute(
+            "SELECT ts, kind, detail, severity FROM events ORDER BY ts DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{"ts": r[0], "kind": r[1], "detail": r[2], "severity": r[3]} for r in rows]
 
 
 def _insert_into(table: str, retention_sec: int, system_sample: dict) -> None:
