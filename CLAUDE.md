@@ -28,7 +28,13 @@ Three layers, one process:
 2. **`sampler.py`** — a single daemon thread runs `_loop()` every `LIVE_INTERVAL_SEC` (2.5 s default), builds a snapshot from `system + services + cron + docker` collectors, stores it as `_last_snapshot`, and broadcasts JSON to every SSE subscriber's `queue.Queue`. Slow consumers get their oldest message dropped rather than blocking the broadcaster. Every `HISTORY_INTERVAL_SEC` (30 s) the system slice is also persisted to SQLite.
 3. **`app.py`** — Flask routes. `/stream` is the SSE endpoint (one thread per browser tab — Waitress is configured with `threads=8` to allow several open tabs plus polling endpoints simultaneously). `/api/snapshot` returns the cached `_last_snapshot` for one-shot requests. Network and maintenance data are *not* in the snapshot — they're polled on-demand via `/api/network` and `/api/maintenance` because they're more expensive and less time-critical.
 
-`storage.py` is a SQLite ringbuffer holding only the **system metrics slice** (CPU/mem/swap/disk/temp/load) for `HISTORY_RETENTION_SEC` (2 h) — used for sparklines on the Overview tab. Services, cron, docker are never persisted.
+`storage.py` holds **four SQLite tables**, all parametrised on the same connection:
+- `samples` — high-res system slice (~30 s resolution, 2 h retention) → drives live sparklines.
+- `samples_long` — coarse system slice (60 s, 7 d) → drives the 2 h/7 d range toggle on Overview.
+- `net_samples` — per-interface cumulative byte counters (60 s, 7 d) → drives the Network tab's bandwidth chart; frontend computes bps deltas.
+- `events` — append-only log of throttle transitions, fired alerts, alert resolutions. Surfaced on Overview's "Recent events" panel and used to make alert history visible.
+
+`alerts.py` is the top-level module that consumes `_last_snapshot` on every sampler tick, evaluates `config.ALERT_RULES` (sustain_sec + cooldown_sec semantics), records fired alerts as events, and dispatches via `config.ALERT_CHANNELS` (ntfy push or generic JSON webhook). `ALERT_CHANNELS` defaults to empty so nothing is sent until the user adds an ntfy URL — the pill in the topbar still surfaces firing alerts regardless.
 
 ## `config.py` is the central control panel
 
