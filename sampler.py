@@ -7,12 +7,13 @@ import queue
 import threading
 import time
 
-import config
-import storage
 import re
 
 import psutil
 
+import alerts
+import config
+import storage
 from collectors import cron_jobs as cron_coll
 from collectors import docker as docker_coll
 from collectors import services as svc_coll
@@ -137,6 +138,7 @@ def _loop() -> None:
                 storage.insert_net(now, _net_samples())
                 last_persist_long = now
             prev_throttle = _track_throttle_transitions(prev_throttle, snap["system"].get("throttle"))
+            alerts.evaluate_and_dispatch(snap)
         except Exception as exc:
             print(f"[sampler] error: {exc}", flush=True)
         time.sleep(config.LIVE_INTERVAL_SEC)

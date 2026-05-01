@@ -20,6 +20,7 @@ import queue
 
 from flask import Flask, Response, jsonify, render_template, request
 
+import alerts
 import config
 import sampler
 import storage
@@ -183,6 +184,11 @@ def api_maintenance():
 @app.get("/api/auth/summary")
 def api_auth_summary():
     return jsonify(auth_coll.summary())
+
+
+@app.get("/api/alerts")
+def api_alerts():
+    return jsonify(alerts=alerts.status())
 
 
 @app.get("/api/net_history")

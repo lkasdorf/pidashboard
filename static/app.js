@@ -430,7 +430,28 @@ function renderDisks(disks) {
 
 // ───────── maintenance pill ─────────
 const maintPill = document.getElementById("maint-pill");
+const alertsPill = document.getElementById("alerts-pill");
 let maintTimer = null;
+
+async function fetchAlerts() {
+  if (!alertsPill) return;
+  try {
+    const r = await fetch(`${BASE}/api/alerts`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const firing = (d.alerts || []).filter((a) => a.firing);
+    if (!firing.length) {
+      alertsPill.hidden = true;
+      return;
+    }
+    alertsPill.hidden = false;
+    alertsPill.textContent = firing.length === 1
+      ? `Alert: ${firing[0].id}`
+      : `${firing.length} alerts firing`;
+    alertsPill.className = "pill bad";
+    alertsPill.title = firing.map((a) => `${a.id}: ${a.metric} ${a.op} ${a.threshold ?? ""} (now ${a.last_value})`).join("\n");
+  } catch (_) {}
+}
 
 async function fetchMaintenance() {
   try {
@@ -1069,3 +1090,5 @@ fetchMaintenance();
 maintTimer = setInterval(fetchMaintenance, 60000);
 fetchEvents();
 setInterval(fetchEvents, 60000);
+fetchAlerts();
+setInterval(fetchAlerts, 15000);

@@ -59,3 +59,24 @@ CRON_ERROR_PATTERNS: tuple[str, ...] = (
 )
 
 TOP_PROCESS_COUNT: int = 5
+
+# Alert channels — leave empty to evaluate rules silently (Overview events
+# panel still shows fired alerts). To get push notifications, add e.g.:
+#   {"type": "ntfy", "url": "https://ntfy.sh/<random-hard-to-guess-topic>"}
+#   {"type": "ntfy", "url": "https://ntfy.sh/<topic>", "priority": "high"}
+#   {"type": "webhook", "url": "https://hooks.slack.com/..."}
+ALERT_CHANNELS: list[dict] = []
+
+# Each rule fires when its metric meets the op/threshold for `sustain_sec`
+# consecutive seconds, and at most once per `cooldown_sec` while it stays true.
+# Supported metrics: cpu, memory, swap, disk_root, temp,
+# undervoltage, throttled, arm_freq_capped, soft_temp_limit (the throttle
+# bits use op="is_true").
+ALERT_RULES: list[dict] = [
+    {"id": "cpu-high",     "metric": "cpu",          "op": ">",       "threshold": 90, "sustain_sec": 300, "cooldown_sec": 1800},
+    {"id": "temp-hot",     "metric": "temp",         "op": ">",       "threshold": 75, "sustain_sec": 60,  "cooldown_sec": 1800},
+    {"id": "disk-full",    "metric": "disk_root",    "op": ">",       "threshold": 90, "sustain_sec": 0,   "cooldown_sec": 86400},
+    {"id": "swap-high",    "metric": "swap",         "op": ">",       "threshold": 50, "sustain_sec": 600, "cooldown_sec": 3600},
+    {"id": "undervoltage", "metric": "undervoltage", "op": "is_true",                  "sustain_sec": 0,   "cooldown_sec": 1800},
+    {"id": "throttled",    "metric": "throttled",    "op": "is_true",                  "sustain_sec": 0,   "cooldown_sec": 1800},
+]
