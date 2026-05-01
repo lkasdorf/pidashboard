@@ -1,0 +1,16 @@
+[Unit]
+Description=Pi Dashboard (system health & service monitor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alneri
+WorkingDirectory=/home/alneri/projects/pidashboard
+Environment=PIDASH_SCRIPT_NAME=/pi
+ExecStart=/home/alneri/projects/pidashboard/.venv/bin/python /home/alneri/projects/pidashboard/app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

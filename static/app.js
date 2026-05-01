@@ -1,0 +1,594 @@
+"use strict";
+
+const BASE = (window.PIDASH && window.PIDASH.base) || "";
+
+const conn = document.getElementById("conn");
+const updated = document.getElementById("updated");
+
+// ───────── formatters ─────────
+const fmtBytes = (n) => {
+  if (n == null) return "–";
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${u[i]}`;
+};
+
+const fmtRate = (bps) => {
+  if (bps == null || !isFinite(bps)) return "–";
+  return `${fmtBytes(bps)}/s`;
+};
+
+const fmtUptime = (s) => {
+  if (s == null) return "–";
+  s = Math.floor(s);
+  const d = Math.floor(s / 86400); s -= d * 86400;
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60);
+  const parts = [];
+  if (d) parts.push(`${d}d`);
+  if (d || h) parts.push(`${h}h`);
+  parts.push(`${m}m`);
+  return parts.join(" ");
+};
+
+const fmtRelative = (ts) => {
+  if (!ts) return "never";
+  const diff = Date.now() / 1000 - ts;
+  if (diff < 60) return `${Math.floor(diff)}s`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return `${Math.floor(diff / 86400)}d`;
+};
+
+const escapeHtml = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+
+const classForPercent = (p, warn = 75, bad = 90) => {
+  if (p == null) return "";
+  if (p >= bad) return "bad";
+  if (p >= warn) return "warn";
+  return "";
+};
+const classForTemp = (t) => {
+  if (t == null) return "";
+  if (t >= 80) return "bad";
+  if (t >= 70) return "warn";
+  return "";
+};
+
+// ───────── sparklines ─────────
+const histories = { cpu: [], mem: [], temp: [] };
+const MAX_POINTS = 360;
+
+function pushHist(key, v) {
+  const arr = histories[key];
+  if (v == null) return;
+  arr.push(v);
+  if (arr.length > MAX_POINTS) arr.shift();
+}
+
+function drawSpark(canvas, data, opts = {}) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 200;
+  const cssH = canvas.clientHeight || 50;
+  if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+  if (data.length < 2) return;
+
+  const min = opts.min ?? Math.min(...data);
+  const max = opts.max ?? Math.max(...data);
+  const span = max - min || 1;
+  const step = cssW / (data.length - 1);
+
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = opts.color || "#4cc9f0";
+  ctx.fillStyle = (opts.color || "#4cc9f0") + "22";
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = cssH - ((v - min) / span) * (cssH - 4) - 2;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.lineTo(cssW, cssH);
+  ctx.lineTo(0, cssH);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function refreshSparks() {
+  document.querySelectorAll("canvas.spark").forEach((c) => {
+    const key = c.dataset.key;
+    const data = histories[key] || [];
+    const opts = key === "temp"
+      ? { color: "#fbbf24", min: 30, max: 90 }
+      : { color: "#4cc9f0", min: 0, max: 100 };
+    drawSpark(c, data, opts);
+  });
+}
+
+function setMetric(id, text, cls = "") {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = "value" + (cls ? " " + cls : "");
+}
+
+// ───────── overview snapshot ─────────
+function renderCores(perCore) {
+  const root = document.getElementById("cpu-cores");
+  if (!root || !Array.isArray(perCore)) return;
+  // Keep DOM elements stable across renders so the height transition can interpolate.
+  if (root.children.length !== perCore.length) {
+    root.innerHTML = perCore.map(() => '<div class="core-bar"><span></span></div>').join("");
+  }
+  perCore.forEach((p, i) => {
+    const bar = root.children[i];
+    if (!bar) return;
+    const cls = p >= 90 ? "core-bar bad" : p >= 70 ? "core-bar warn" : "core-bar";
+    if (bar.className !== cls) bar.className = cls;
+    bar.firstElementChild.style.height = `${Math.max(2, Math.min(100, p)).toFixed(1)}%`;
+    bar.title = `Core ${i}: ${p.toFixed(0)}%`;
+  });
+}
+
+function applySnapshot(snap) {
+  const sys = snap.system;
+  setMetric("cpu-val", `${sys.cpu.percent.toFixed(0)}%`, classForPercent(sys.cpu.percent));
+  document.getElementById("cpu-foot").textContent =
+    `load: ${sys.cpu.load1.toFixed(2)} / ${sys.cpu.load5.toFixed(2)} / ${sys.cpu.load15.toFixed(2)}`;
+  pushHist("cpu", sys.cpu.percent);
+  renderCores(sys.cpu.per_core);
+
+  setMetric("mem-val", `${sys.memory.percent.toFixed(0)}%`, classForPercent(sys.memory.percent));
+  document.getElementById("mem-foot").textContent =
+    `${fmtBytes(sys.memory.used)} / ${fmtBytes(sys.memory.total)}`;
+  pushHist("mem", sys.memory.percent);
+
+  if (sys.temp_c != null) {
+    setMetric("temp-val", `${sys.temp_c.toFixed(1)} °C`, classForTemp(sys.temp_c));
+    pushHist("temp", sys.temp_c);
+  } else {
+    setMetric("temp-val", "n/a");
+  }
+
+  renderThrottle(sys.throttle);
+  renderDisks(sys.disks || []);
+
+  setMetric("uptime-val", fmtUptime(sys.uptime_sec));
+  document.getElementById("swap-foot").textContent =
+    `swap: ${sys.swap.percent.toFixed(0)}% (${fmtBytes(sys.swap.used)} / ${fmtBytes(sys.swap.total)})`;
+
+  refreshSparks();
+  renderServices(snap.services);
+  renderCron(snap.cron);
+  renderProcs(sys.top_processes);
+  updateFavicon(sys.cpu.percent);
+
+  conn.textContent = "live";
+  conn.className = "conn on";
+  updated.textContent = `updated ${new Date().toLocaleTimeString("en-GB")}`;
+}
+
+function dotForActive(active) {
+  if (active === "active") return '<span class="dot good"></span>';
+  if (active === "activating" || active === "reloading") return '<span class="dot warn"></span>';
+  if (active === "failed") return '<span class="dot bad"></span>';
+  return '<span class="dot muted"></span>';
+}
+
+function renderServices(items) {
+  const tbody = document.querySelector("#services-table tbody");
+  const controllable = new Set(window.PIDASH.controllable);
+  tbody.innerHTML = items.map((s) => {
+    const since = s.active_since && s.active_since !== "" && s.active_since !== "n/a"
+      ? s.active_since.replace(/^[A-Za-z]+ /, "")
+      : "–";
+    const ctrlButtons = controllable.has(s.unit)
+      ? window.PIDASH.actions.map((a) =>
+          `<button class="act${a === "stop" ? " danger" : ""}" data-unit="${escapeHtml(s.unit)}" data-action="${a}">${a}</button>`
+        ).join("")
+      : "";
+    const logButton = `<button class="show-svc-log" data-unit="${escapeHtml(s.unit)}">log</button>`;
+    return `<tr>
+      <td>${dotForActive(s.active)}<code>${escapeHtml(s.unit)}</code></td>
+      <td>${escapeHtml(s.active)}</td>
+      <td>${escapeHtml(s.sub_state || "–")}</td>
+      <td>${s.main_pid && s.main_pid !== "0" ? escapeHtml(s.main_pid) : "–"}</td>
+      <td>${escapeHtml(since)}</td>
+      <td>${ctrlButtons}${ctrlButtons ? " " : ""}${logButton}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderCron(items) {
+  const tbody = document.querySelector("#cron-table tbody");
+  const now = Date.now() / 1000;
+  tbody.innerHTML = items.map((j) => {
+    let dot = '<span class="dot muted"></span>';
+    let statusText = "no log";
+    let statusTitle = "";
+    if (j.last_run) {
+      const ageSec = now - j.last_run;
+      const stale = j.interval_sec && ageSec > 2 * j.interval_sec;
+      if (j.has_error) {
+        dot = '<span class="dot bad"></span>';
+        statusText = "error in log";
+        statusTitle = j.last_error_line || "";
+      } else if (stale) {
+        dot = '<span class="dot muted"></span>';
+        statusText = `silent (since ${fmtRelative(j.last_run)})`;
+        statusTitle = `Schedule ${j.schedule_human}, no output — job likely only logs on activity`;
+      } else {
+        dot = '<span class="dot good"></span>';
+        statusText = "ok";
+      }
+    }
+    const scheduleCell = j.schedule_human !== j.schedule
+      ? `<span title="${escapeHtml(j.schedule)}">${escapeHtml(j.schedule_human)}</span>`
+      : `<code>${escapeHtml(j.schedule)}</code>`;
+    return `<tr>
+      <td><code>${escapeHtml(j.name)}</code></td>
+      <td>${scheduleCell}</td>
+      <td>${fmtRelative(j.last_run)}</td>
+      <td title="${escapeHtml(statusTitle)}">${dot}${escapeHtml(statusText)}</td>
+      <td><button class="show-log" data-job="${escapeHtml(j.name)}">open</button></td>
+    </tr>`;
+  }).join("");
+}
+
+function renderProcs(items) {
+  const tbody = document.querySelector("#proc-table tbody");
+  tbody.innerHTML = (items || []).map((p) =>
+    `<tr><td>${p.pid}</td><td><code>${escapeHtml(p.name)}</code></td><td>${p.cpu.toFixed(1)}</td><td>${p.mem.toFixed(1)}</td></tr>`
+  ).join("");
+}
+
+const THROTTLE_LABELS = {
+  undervoltage: "Undervoltage",
+  arm_freq_capped: "ARM freq capped",
+  throttled: "Throttled",
+  soft_temp_limit: "Temp limit",
+};
+
+function renderThrottle(t) {
+  const valEl = document.getElementById("throttle-val");
+  const footEl = document.getElementById("throttle-foot");
+  if (!t) { valEl.textContent = "n/a"; valEl.className = "value small"; footEl.textContent = "vcgencmd unavailable"; return; }
+  const nowFlags = Object.entries(t.now).filter(([_, v]) => v).map(([k]) => THROTTLE_LABELS[k]);
+  const bootFlags = Object.entries(t.since_boot).filter(([_, v]) => v).map(([k]) => THROTTLE_LABELS[k]);
+  if (nowFlags.length) {
+    valEl.textContent = nowFlags.join(", ");
+    valEl.className = "value small bad";
+  } else if (bootFlags.length) {
+    valEl.textContent = "OK";
+    valEl.className = "value warn";
+  } else {
+    valEl.textContent = "OK";
+    valEl.className = "value good";
+  }
+  footEl.textContent = bootFlags.length
+    ? `since boot: ${bootFlags.join(", ")}`
+    : "since boot: clean";
+}
+
+function renderDisks(disks) {
+  const root = document.getElementById("disks-list");
+  if (!disks.length) { root.innerHTML = '<div class="muted">no mounts</div>'; return; }
+  root.innerHTML = disks.map((d) => {
+    const cls = d.percent >= 90 ? " bad" : d.percent >= 75 ? " warn" : "";
+    return `<div class="disk-row">
+      <div class="disk-mount">
+        <code>${escapeHtml(d.mount)}</code>
+        <span class="muted">${escapeHtml(d.fstype)} · ${escapeHtml(d.device)}</span>
+      </div>
+      <div class="disk-numbers">${fmtBytes(d.used)} / ${fmtBytes(d.total)} <span class="muted">(${d.percent.toFixed(0)}%)</span></div>
+      <div class="disk-bar${cls}"><span style="width: ${Math.max(0, Math.min(100, d.percent)).toFixed(1)}%"></span></div>
+    </div>`;
+  }).join("");
+}
+
+// ───────── maintenance pill ─────────
+const maintPill = document.getElementById("maint-pill");
+let maintTimer = null;
+
+async function fetchMaintenance() {
+  try {
+    const r = await fetch(`${BASE}/api/maintenance`);
+    if (!r.ok) return;
+    renderMaintenance(await r.json());
+  } catch (_) {}
+}
+
+function renderMaintenance(m) {
+  if (!maintPill) return;
+  const reboot = m.reboot && m.reboot.required;
+  const updates = m.updates && m.updates.count;
+  const parts = [];
+  if (reboot) parts.push("Reboot needed");
+  if (updates && updates > 0) parts.push(`${updates} update${updates === 1 ? "" : "s"}`);
+  if (parts.length === 0) {
+    maintPill.hidden = true;
+    return;
+  }
+  maintPill.hidden = false;
+  maintPill.textContent = parts.join(" · ");
+  maintPill.className = "pill " + (reboot ? "bad" : "warn");
+  const pkgs = (m.reboot && m.reboot.packages) || [];
+  maintPill.title = pkgs.length
+    ? `Reboot due to: ${pkgs.join(", ")}`
+    : (updates ? "apt list --upgradable reported packages" : "");
+}
+
+// ───────── service controls ─────────
+document.querySelector("#services-table").addEventListener("click", async (ev) => {
+  const actBtn = ev.target.closest("button.act");
+  const logBtn = ev.target.closest("button.show-svc-log");
+  if (actBtn) {
+    const unit = actBtn.dataset.unit;
+    const action = actBtn.dataset.action;
+    if (!confirm(`${action} ${unit}?`)) return;
+    actBtn.disabled = true;
+    try {
+      const r = await fetch(`${BASE}/api/services/${encodeURIComponent(unit)}/${encodeURIComponent(action)}`, { method: "POST" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) alert(`Error: ${data.message || r.status}`);
+    } catch (e) {
+      alert(`Network error: ${e}`);
+    } finally {
+      actBtn.disabled = false;
+    }
+  } else if (logBtn) {
+    openLogModal(`${logBtn.dataset.unit} (journalctl, last 200 lines)`,
+                 `${BASE}/api/services/${encodeURIComponent(logBtn.dataset.unit)}/log?lines=200`);
+  }
+});
+
+// ───────── cron log modal ─────────
+const modal = document.getElementById("log-modal");
+const logTitle = document.getElementById("log-title");
+const logBody = document.getElementById("log-body");
+document.getElementById("log-close").addEventListener("click", () => modal.close());
+
+async function openLogModal(title, url) {
+  logTitle.textContent = title;
+  logBody.textContent = "loading …";
+  modal.showModal();
+  try {
+    const r = await fetch(url);
+    const data = await r.json();
+    logBody.textContent = (data.lines || []).join("\n") || "(empty)";
+    logBody.scrollTop = logBody.scrollHeight;
+  } catch (e) {
+    logBody.textContent = `Error: ${e}`;
+  }
+}
+
+document.querySelector("#cron-table").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button.show-log");
+  if (!btn) return;
+  const job = btn.dataset.job;
+  openLogModal(`${job} (last 200 lines)`, `${BASE}/api/cron/${encodeURIComponent(job)}/log?lines=200`);
+});
+
+// ───────── tabs ─────────
+const TABS = ["overview", "services", "network"];
+
+function activateTab(name) {
+  if (!TABS.includes(name)) name = "overview";
+  document.querySelectorAll(".tab").forEach((b) => {
+    const on = b.dataset.tab === name;
+    b.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  document.querySelectorAll(".tab-panel").forEach((p) => {
+    p.hidden = p.dataset.panel !== name;
+  });
+  if (name === "network") {
+    startNetworkPolling();
+  } else {
+    stopNetworkPolling();
+  }
+  if (name === "overview") {
+    refreshSparks();
+  }
+}
+
+document.querySelectorAll(".tab").forEach((b) => {
+  b.addEventListener("click", () => {
+    const name = b.dataset.tab;
+    history.replaceState(null, "", `#${name}`);
+    activateTab(name);
+  });
+});
+window.addEventListener("hashchange", () => {
+  activateTab((location.hash || "#overview").slice(1));
+});
+
+// ───────── network tab ─────────
+let netTimer = null;
+let lastIfaceSample = null; // { ts, byName: {name: {rx, tx}} }
+
+async function fetchNetwork() {
+  try {
+    const r = await fetch(`${BASE}/api/network`);
+    if (!r.ok) return;
+    const d = await r.json();
+    renderHost(d.host);
+    renderInterfaces(d.interfaces);
+    renderReachability(d.reachability);
+    renderPeers(d.peers || []);
+    renderSockets(d.sockets);
+  } catch (_) {}
+}
+
+function startNetworkPolling() {
+  if (netTimer) return;
+  fetchNetwork();
+  netTimer = setInterval(fetchNetwork, 5000);
+}
+function stopNetworkPolling() {
+  if (netTimer) { clearInterval(netTimer); netTimer = null; }
+}
+
+function renderHost(h) {
+  if (!h) return;
+  const ts = h.tailscale;
+  const fqdnRow = (h.fqdn && h.fqdn !== h.hostname)
+    ? `<dt>FQDN</dt><dd><code>${escapeHtml(h.fqdn)}</code></dd>` : "";
+  const tsRow = ts ? `
+    <dt>Tailscale</dt>
+    <dd class="stack">
+      <span><code>${escapeHtml(ts.dns_name || "")}</code> <span class="muted">(${escapeHtml(ts.backend_state || "?")}${ts.online ? ", online" : ""})</span></span>
+      ${(ts.ips || []).map((ip) => `<code>${escapeHtml(ip)}</code>`).join("")}
+    </dd>` : "";
+  document.getElementById("net-host").innerHTML = `
+    <dt>Hostname</dt><dd><code>${escapeHtml(h.hostname || "–")}</code></dd>
+    ${fqdnRow}
+    <dt>Model</dt><dd>${escapeHtml(h.model || "–")}</dd>
+    <dt>OS</dt><dd>${escapeHtml(h.os || "–")} <span class="muted">(${escapeHtml(h.kernel || "")} · ${escapeHtml(h.arch || "")})</span></dd>
+    ${tsRow}
+  `;
+}
+
+function renderInterfaces(ifaces) {
+  const tbody = document.querySelector("#net-interfaces tbody");
+  const now = Date.now() / 1000;
+  const prev = lastIfaceSample;
+  const byName = {};
+  for (const i of ifaces) byName[i.name] = { rx: i.rx_bytes, tx: i.tx_bytes };
+
+  tbody.innerHTML = ifaces.map((i) => {
+    const stateDot = i.up ? '<span class="dot good"></span>' : '<span class="dot muted"></span>';
+    const stateText = i.up ? "up" : "down";
+    let bw = "–";
+    if (prev && prev.byName[i.name]) {
+      const dt = now - prev.ts;
+      if (dt > 0.1) {
+        const drx = (i.rx_bytes - prev.byName[i.name].rx) / dt;
+        const dtx = (i.tx_bytes - prev.byName[i.name].tx) / dt;
+        if (drx >= 0 && dtx >= 0) {
+          bw = `↓ ${fmtRate(drx)} <span class="muted">·</span> ↑ ${fmtRate(dtx)}`;
+        }
+      }
+    }
+    const wifi = i.wireless
+      ? ` <span class="muted">(${i.wireless.signal_dbm.toFixed(0)} dBm${i.wireless.ssid ? ", " + escapeHtml(i.wireless.ssid) : ""})</span>` : "";
+    return `<tr>
+      <td>${stateDot}<code>${escapeHtml(i.name)}</code>${wifi}</td>
+      <td>${stateText}${i.speed_mbps ? ` <span class="muted">${i.speed_mbps} Mbit/s</span>` : ""}</td>
+      <td><code>${escapeHtml(i.ipv4 || "–")}</code></td>
+      <td><code>${escapeHtml(i.mac || "–")}</code></td>
+      <td>${fmtBytes(i.rx_bytes)}</td>
+      <td>${fmtBytes(i.tx_bytes)}</td>
+      <td>${bw}</td>
+    </tr>`;
+  }).join("");
+
+  lastIfaceSample = { ts: now, byName };
+}
+
+function renderReachability(r) {
+  if (!r) return;
+  const routes = (r.default_routes || []).map((rt) =>
+    `<span><code>${escapeHtml(rt.gateway || "?")}</code> via <code>${escapeHtml(rt.iface || "?")}</code>${rt.metric != null ? ` <span class="muted">metric ${rt.metric}</span>` : ""}</span>`
+  ).join("");
+  const dns = (r.dns_servers || []).map((d) => `<code>${escapeHtml(d)}</code>`).join(" ");
+  document.getElementById("net-reachability").innerHTML = `
+    <dt>Default gateway</dt><dd class="stack">${routes || "–"}</dd>
+    <dt>DNS servers</dt><dd>${dns || "–"}</dd>
+  `;
+}
+
+function renderPeers(peers) {
+  const tbody = document.querySelector("#net-peers tbody");
+  if (!peers.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">no peers</td></tr>'; return; }
+  tbody.innerHTML = peers.map((p) => {
+    const dot = p.online ? '<span class="dot good"></span>online' : '<span class="dot muted"></span>offline';
+    const lastSeen = p.online
+      ? '<span class="muted">now</span>'
+      : (p.last_seen ? fmtRelative(Date.parse(p.last_seen) / 1000) : '<span class="muted">–</span>');
+    return `<tr>
+      <td>${dot}</td>
+      <td><code>${escapeHtml(p.hostname)}</code><br><span class="muted">${escapeHtml(p.dns_name)}</span></td>
+      <td><code>${escapeHtml(p.ipv4 || "–")}</code></td>
+      <td>${escapeHtml(p.os || "–")}</td>
+      <td>${lastSeen}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderSockets(sockets) {
+  const tbody = document.querySelector("#net-sockets tbody");
+  tbody.innerHTML = (sockets || []).map((s) => `
+    <tr>
+      <td><code>${escapeHtml(s.proto)}</code></td>
+      <td><code>${escapeHtml(s.addr)}</code></td>
+      <td>${s.port}</td>
+      <td>${s.process ? `<code>${escapeHtml(s.process)}</code>${s.pid ? ` <span class="muted">pid ${s.pid}</span>` : ""}` : '<span class="muted">–</span>'}</td>
+    </tr>`).join("");
+}
+
+// ───────── favicon (CPU-tinted π) ─────────
+const faviconEl = document.getElementById("favicon");
+let lastFaviconColor = null;
+
+function colorForCpu(p) {
+  if (p == null) return "#4cc9f0";
+  if (p >= 90) return "#f87171";
+  if (p >= 70) return "#fbbf24";
+  return "#4ade80";
+}
+
+function updateFavicon(cpuPercent) {
+  if (!faviconEl) return;
+  const color = colorForCpu(cpuPercent);
+  if (color === lastFaviconColor) return;
+  lastFaviconColor = color;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="6" fill="#0f1115"/>
+    <text x="50%" y="55%" text-anchor="middle" dominant-baseline="central"
+          font-family="ui-monospace, monospace" font-size="22" font-weight="700" fill="${color}">π</text>
+  </svg>`;
+  faviconEl.href = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+// ───────── boot ─────────
+async function loadHistory() {
+  try {
+    const r = await fetch(`${BASE}/api/history`);
+    const data = await r.json();
+    for (const s of data.samples || []) {
+      pushHist("cpu", s.cpu);
+      pushHist("mem", s.mem);
+      if (s.temp != null) pushHist("temp", s.temp);
+    }
+    refreshSparks();
+  } catch (_) {}
+}
+
+function connect() {
+  const es = new EventSource(`${BASE}/stream`);
+  es.onmessage = (ev) => {
+    try { applySnapshot(JSON.parse(ev.data)); } catch (_) {}
+  };
+  es.onerror = () => {
+    conn.textContent = "connection lost";
+    conn.className = "conn off";
+    es.close();
+    setTimeout(connect, 3000);
+  };
+}
+
+window.addEventListener("resize", refreshSparks);
+activateTab((location.hash || "#overview").slice(1));
+loadHistory().then(connect);
+fetchMaintenance();
+maintTimer = setInterval(fetchMaintenance, 60000);

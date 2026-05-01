@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pidashboard</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}" id="favicon">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <h1 class="brand"><span class="brand-glyph">π</span>dashboard</h1>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" data-tab="overview" role="tab" aria-selected="true"  aria-controls="panel-overview" id="tab-overview">Overview</button>
+    <button class="tab" data-tab="services" role="tab" aria-selected="false" aria-controls="panel-services" id="tab-services">Services</button>
+    <button class="tab" data-tab="network"  role="tab" aria-selected="false" aria-controls="panel-network"  id="tab-network">Network</button>
+  </nav>
+  <span class="spacer"></span>
+  <span id="maint-pill" class="pill" hidden></span>
+  <span id="conn" class="conn off" aria-live="polite">offline</span>
+  <span id="updated" class="muted"></span>
+</header>
+
+<main>
+
+<section class="tab-panel" data-panel="overview" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+  <div class="cards">
+    <div class="card" data-metric="cpu">
+      <div class="card-head"><h2>CPU</h2><span class="value" id="cpu-val">–</span></div>
+      <canvas class="spark" data-key="cpu" height="50"></canvas>
+      <div class="cores" id="cpu-cores" aria-label="Per-core load"></div>
+      <div class="card-foot muted" id="cpu-foot">load: –</div>
+    </div>
+    <div class="card" data-metric="mem">
+      <div class="card-head"><h2>RAM</h2><span class="value" id="mem-val">–</span></div>
+      <canvas class="spark" data-key="mem" height="50"></canvas>
+      <div class="card-foot muted" id="mem-foot">– / –</div>
+    </div>
+    <div class="card" data-metric="temp">
+      <div class="card-head"><h2>Temp</h2><span class="value" id="temp-val">–</span></div>
+      <canvas class="spark" data-key="temp" height="50"></canvas>
+      <div class="card-foot muted" id="temp-foot">SoC</div>
+    </div>
+    <div class="card" data-metric="throttle">
+      <div class="card-head"><h2>Throttle</h2><span class="value" id="throttle-val">–</span></div>
+      <div class="card-foot muted" id="throttle-foot">since boot: –</div>
+    </div>
+    <div class="card" data-metric="uptime">
+      <div class="card-head"><h2>Uptime</h2><span class="value" id="uptime-val">–</span></div>
+      <div class="card-foot muted" id="swap-foot">swap: –</div>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h2>Disks</h2>
+    <div class="disks" id="disks-list"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Top Processes</h2>
+    <table class="grid" id="proc-table">
+      <thead><tr><th>PID</th><th>Name</th><th>CPU%</th><th>MEM%</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</section>
+
+<section class="tab-panel" data-panel="services" id="panel-services" role="tabpanel" aria-labelledby="tab-services" hidden>
+  <section class="panel">
+    <h2>Services</h2>
+    <table class="grid" id="services-table">
+      <thead><tr>
+        <th>Unit</th><th>Active</th><th>Sub</th><th>PID</th><th>Since</th><th>Action</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Cron jobs</h2>
+    <table class="grid" id="cron-table">
+      <thead><tr>
+        <th>Name</th><th>Schedule</th><th>Last run</th><th>Status</th><th>Log</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</section>
+
+<section class="tab-panel" data-panel="network" id="panel-network" role="tabpanel" aria-labelledby="tab-network" hidden>
+  <section class="panel">
+    <h2>Host</h2>
+    <dl class="kv" id="net-host">
+      <dt>Hostname</dt><dd>–</dd>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <h2>Interfaces</h2>
+    <table class="grid" id="net-interfaces">
+      <thead><tr>
+        <th>Iface</th><th>Status</th><th>IPv4</th><th>MAC</th><th>RX</th><th>TX</th><th>Bandwidth</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Reachability</h2>
+    <dl class="kv" id="net-reachability">
+      <dt>Default gateway</dt><dd>–</dd>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <h2>Tailscale peers</h2>
+    <table class="grid" id="net-peers">
+      <thead><tr>
+        <th>Status</th><th>Hostname</th><th>IPv4</th><th>OS</th><th>Last seen</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Listening sockets</h2>
+    <table class="grid" id="net-sockets">
+      <thead><tr>
+        <th>Proto</th><th>Address</th><th>Port</th><th>Process</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</section>
+
+</main>
+
+<dialog id="log-modal">
+  <div class="modal-head">
+    <h3 id="log-title">Log</h3>
+    <button id="log-close" aria-label="Close">×</button>
+  </div>
+  <pre id="log-body"></pre>
+</dialog>
+
+<script>
+window.PIDASH = {
+  base: {{ request.script_root|tojson }},
+  controllable: {{ controllable_services|tojson }},
+  actions: {{ allowed_actions|tojson }},
+  retentionSec: {{ history_retention_sec }}
+};
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

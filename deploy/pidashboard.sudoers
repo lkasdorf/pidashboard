@@ -1,0 +1,23 @@
+# /etc/sudoers.d/pidashboard  (mode 0440, owner root:root)
+#
+# Install:
+#   sudo install -m 0440 -o root -g root \
+#     /home/alneri/projects/pidashboard/deploy/pidashboard.sudoers \
+#     /etc/sudoers.d/pidashboard
+#   sudo visudo -c
+#
+# Allows the alneri user to start/stop/restart exactly the four whitelisted units
+# without a password. Keep this list in sync with CONTROLLABLE_SERVICES in config.py.
+
+alneri ALL=(root) NOPASSWD: /usr/bin/systemctl start financeos.service, \
+                            /usr/bin/systemctl stop financeos.service, \
+                            /usr/bin/systemctl restart financeos.service, \
+                            /usr/bin/systemctl start tailscaled.service, \
+                            /usr/bin/systemctl stop tailscaled.service, \
+                            /usr/bin/systemctl restart tailscaled.service, \
+                            /usr/bin/systemctl start ssh.service, \
+                            /usr/bin/systemctl stop ssh.service, \
+                            /usr/bin/systemctl restart ssh.service, \
+                            /usr/bin/systemctl start cron.service, \
+                            /usr/bin/systemctl stop cron.service, \
+                            /usr/bin/systemctl restart cron.service
