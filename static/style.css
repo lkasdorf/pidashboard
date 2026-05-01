@@ -289,6 +289,40 @@ dialog#log-modal::backdrop { background: rgba(0,0,0,0.6); }
   .kv dt { padding-top: 6px; }
 }
 
+/* ───────── compact mobile mode (≤480 px) ─────────
+   Phone-portrait view: drop everything except the at-a-glance health pills.
+   Cards collapse to 2-up, sparklines hide, secondary panels hide so the
+   first screen is just CPU/RAM/Temp/Throttle/Storage + maintenance/alerts. */
+@media (max-width: 480px) {
+  body { font-size: 13px; }
+  .topbar { padding: 6px 8px; flex-wrap: wrap; }
+  .brand { font-size: 14px; }
+  .tabs { padding: 2px; }
+  .tab { padding: 4px 8px; font-size: 12px; }
+
+  /* Collapse to 2-column grid, stack within each card. */
+  .cards { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .card { padding: 8px 10px; }
+  .card-head h2 { font-size: 11px; letter-spacing: 0.4px; }
+  .card .value { font-size: 18px; }
+  .card .value.small { font-size: 14px; }
+
+  /* Sparklines and per-core bars are noise on a phone glance — hide them. */
+  canvas.spark { display: none; }
+  .cores { display: none; }
+
+  /* Secondary panels on Overview hide unless the user explicitly scrolls. */
+  #panel-overview .panel { display: none; }
+
+  /* Range toggle and tab-status row are also noise in this mode. */
+  .range-toggle { display: none; }
+
+  /* Compact maintenance/alerts pills so they fit alongside the brand. */
+  #maint-pill, #alerts-pill { font-size: 11px; padding: 2px 6px; }
+
+  /* Tabs row already wraps to a new row via the 768 px rule above. */
+}
+
 /* ───────── motion preference ───────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
