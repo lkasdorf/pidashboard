@@ -466,7 +466,7 @@ document.querySelector("#cron-table").addEventListener("click", (ev) => {
 });
 
 // ───────── tabs ─────────
-const TABS = ["overview", "services", "network"];
+const TABS = ["overview", "services", "network", "logs"];
 
 function activateTab(name) {
   if (!TABS.includes(name)) name = "overview";
@@ -477,14 +477,9 @@ function activateTab(name) {
   document.querySelectorAll(".tab-panel").forEach((p) => {
     p.hidden = p.dataset.panel !== name;
   });
-  if (name === "network") {
-    startNetworkPolling();
-  } else {
-    stopNetworkPolling();
-  }
-  if (name === "overview") {
-    refreshSparks();
-  }
+  if (name === "network") startNetworkPolling(); else stopNetworkPolling();
+  if (name === "overview") refreshSparks();
+  if (name === "logs") fetchSyslog();
 }
 
 document.querySelectorAll(".tab").forEach((b) => {
@@ -621,6 +616,33 @@ function renderSockets(sockets) {
       <td>${s.process ? `<code>${escapeHtml(s.process)}</code>${s.pid ? ` <button class="pid-link" data-pid="${s.pid}">pid ${s.pid}</button>` : ""}` : '<span class="muted">–</span>'}</td>
     </tr>`).join("");
 }
+
+// ───────── system log tab ─────────
+const syslogPriorityEl = document.getElementById("syslog-priority");
+const syslogRefreshEl = document.getElementById("syslog-refresh");
+const syslogBodyEl = document.getElementById("syslog-body");
+const syslogMetaEl = document.getElementById("syslog-meta");
+
+async function fetchSyslog() {
+  if (!syslogBodyEl) return;
+  const priority = syslogPriorityEl.value;
+  syslogBodyEl.textContent = "loading …";
+  syslogMetaEl.textContent = "";
+  try {
+    const r = await fetch(`${BASE}/api/system/log?priority=${encodeURIComponent(priority)}&lines=100`);
+    if (!r.ok) { syslogBodyEl.textContent = `Error: ${r.status}`; return; }
+    const d = await r.json();
+    const lines = d.lines || [];
+    syslogBodyEl.textContent = lines.length ? lines.join("\n") : "(no entries at this priority)";
+    syslogBodyEl.scrollTop = syslogBodyEl.scrollHeight;
+    syslogMetaEl.textContent = `${lines.length} lines · loaded ${new Date().toLocaleTimeString("en-GB")}`;
+  } catch (e) {
+    syslogBodyEl.textContent = `Error: ${e}`;
+  }
+}
+
+if (syslogPriorityEl) syslogPriorityEl.addEventListener("change", fetchSyslog);
+if (syslogRefreshEl) syslogRefreshEl.addEventListener("click", fetchSyslog);
 
 // ───────── favicon (CPU-tinted π) ─────────
 const faviconEl = document.getElementById("favicon");

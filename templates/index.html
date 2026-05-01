@@ -14,6 +14,7 @@
     <button class="tab" data-tab="overview" role="tab" aria-selected="true"  aria-controls="panel-overview" id="tab-overview">Overview</button>
     <button class="tab" data-tab="services" role="tab" aria-selected="false" aria-controls="panel-services" id="tab-services">Services</button>
     <button class="tab" data-tab="network"  role="tab" aria-selected="false" aria-controls="panel-network"  id="tab-network">Network</button>
+    <button class="tab" data-tab="logs"     role="tab" aria-selected="false" aria-controls="panel-logs"     id="tab-logs">Logs</button>
   </nav>
   <span class="spacer"></span>
   <span id="maint-pill" class="pill" hidden></span>
@@ -140,6 +141,24 @@
       </tr></thead>
       <tbody></tbody>
     </table>
+  </section>
+</section>
+
+<section class="tab-panel" data-panel="logs" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs" hidden>
+  <section class="panel">
+    <h2>System log <span class="muted">(journalctl, last 100 lines)</span></h2>
+    <div class="syslog-controls">
+      <label class="syslog-label">priority
+        <select id="syslog-priority">
+          <option value="err">error+</option>
+          <option value="warning" selected>warning+</option>
+          <option value="info">info+</option>
+        </select>
+      </label>
+      <button id="syslog-refresh">refresh</button>
+      <span id="syslog-meta" class="muted"></span>
+    </div>
+    <pre class="logbody" id="syslog-body">click refresh to load</pre>
   </section>
 </section>
 

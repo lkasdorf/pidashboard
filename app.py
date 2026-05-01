@@ -26,6 +26,7 @@ from collectors import cron_jobs as cron_coll
 from collectors import maintenance as maint_coll
 from collectors import network as net_coll
 from collectors import services as svc_coll
+from collectors import syslog as syslog_coll
 from collectors import system as sys_coll
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
@@ -163,6 +164,16 @@ def api_process(pid: int):
     if info is None:
         return jsonify(error="not found"), 404
     return jsonify(info)
+
+
+@app.get("/api/system/log")
+def api_system_log():
+    priority = request.args.get("priority", "warning")
+    try:
+        lines = max(1, min(2000, int(request.args.get("lines", 100))))
+    except ValueError:
+        lines = 100
+    return jsonify(lines=syslog_coll.tail(priority, lines))
 
 
 def main() -> None:
