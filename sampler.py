@@ -9,11 +9,17 @@ import time
 
 import config
 import storage
+import re
+
+import psutil
+
 from collectors import cron_jobs as cron_coll
 from collectors import docker as docker_coll
 from collectors import services as svc_coll
 from collectors import system as sys_coll
 from collectors import timers as timer_coll
+
+_VETH_RE = re.compile(r"^(veth|docker|br-|tailscale|cni|flannel)")
 
 _subscribers: list[queue.Queue] = []
 _sub_lock = threading.Lock()
@@ -100,6 +106,19 @@ def _track_throttle_transitions(prev: dict | None, curr: dict | None) -> dict | 
     return dict(now_bits)
 
 
+def _net_samples() -> list[dict]:
+    out: list[dict] = []
+    try:
+        io = psutil.net_io_counters(pernic=True)
+    except Exception:
+        return out
+    for name, c in io.items():
+        if name == "lo" or _VETH_RE.match(name):
+            continue
+        out.append({"iface": name, "rx_bytes": c.bytes_recv, "tx_bytes": c.bytes_sent})
+    return out
+
+
 def _loop() -> None:
     last_persist = 0.0
     last_persist_long = 0.0
@@ -115,6 +134,7 @@ def _loop() -> None:
                 last_persist = now
             if now - last_persist_long >= config.LONG_HISTORY_INTERVAL_SEC:
                 storage.insert_long(snap["system"])
+                storage.insert_net(now, _net_samples())
                 last_persist_long = now
             prev_throttle = _track_throttle_transitions(prev_throttle, snap["system"].get("throttle"))
         except Exception as exc:

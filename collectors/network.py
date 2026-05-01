@@ -78,6 +78,13 @@ def _tailscale_self() -> dict | None:
     if not d:
         return None
     self_ = d.get("Self") or {}
+    exit_node_id = d.get("ExitNodeStatus") or {}
+    exit_node_name = None
+    if exit_node_id.get("ID"):
+        for p in (d.get("Peer") or {}).values():
+            if p.get("ID") == exit_node_id.get("ID"):
+                exit_node_name = (p.get("DNSName") or "").rstrip(".") or p.get("HostName")
+                break
     return {
         "hostname": self_.get("HostName"),
         "dns_name": (self_.get("DNSName") or "").rstrip("."),
@@ -85,6 +92,14 @@ def _tailscale_self() -> dict | None:
         "tailnet": d.get("MagicDNSSuffix"),
         "backend_state": d.get("BackendState"),
         "online": bool(self_.get("Online", False)),
+        "tags": self_.get("Tags") or [],
+        "advertised_routes": self_.get("PrimaryRoutes") or self_.get("AdvertisedRoutes") or [],
+        "exit_node_active": bool(exit_node_id.get("ID")),
+        "exit_node": exit_node_name,
+        "is_exit_node": bool(self_.get("ExitNode")),
+        "ssh_enabled": bool((d.get("CurrentTailnet") or {}).get("SSHHostKeys")) or any(
+            "ssh" in (cap or "") for cap in (self_.get("Capabilities") or [])
+        ),
     }
 
 

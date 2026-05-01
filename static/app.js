@@ -603,6 +603,7 @@ async function fetchNetwork() {
     if (!r.ok) return;
     const d = await r.json();
     renderHost(d.host);
+    renderTailscaleSelf(d.host && d.host.tailscale);
     renderInterfaces(d.interfaces);
     renderReachability(d.reachability);
     renderPeers(d.peers || []);
@@ -613,6 +614,7 @@ async function fetchNetwork() {
 function startNetworkPolling() {
   if (netTimer) return;
   fetchNetwork();
+  fetchBandwidthIfaces();
   netTimer = setInterval(fetchNetwork, 5000);
 }
 function stopNetworkPolling() {
@@ -688,6 +690,112 @@ function renderReachability(r) {
   `;
 }
 
+function renderTailscaleSelf(ts) {
+  const root = document.getElementById("net-tailscale-self");
+  if (!root) return;
+  if (!ts) {
+    root.innerHTML = '<dt>State</dt><dd class="muted">tailscale not running</dd>';
+    return;
+  }
+  const ips = (ts.ips || []).map((ip) => `<code>${escapeHtml(ip)}</code>`).join(" ");
+  const tags = (ts.tags || []).map((t) => `<code>${escapeHtml(t)}</code>`).join(" ");
+  const routes = (ts.advertised_routes || []).map((r) => `<code>${escapeHtml(r)}</code>`).join(" ");
+  const exitRow = ts.exit_node_active && ts.exit_node
+    ? `<dt>Exit node</dt><dd><code>${escapeHtml(ts.exit_node)}</code></dd>`
+    : "";
+  const isExitRow = ts.is_exit_node ? '<dt>Role</dt><dd>this node is an exit node</dd>' : "";
+  root.innerHTML = `
+    <dt>State</dt><dd>${escapeHtml(ts.backend_state || "?")}${ts.online ? " · online" : " · offline"}</dd>
+    <dt>DNS</dt><dd><code>${escapeHtml(ts.dns_name || "–")}</code> <span class="muted">(${escapeHtml(ts.tailnet || "?")})</span></dd>
+    <dt>IPs</dt><dd class="stack">${ips || "–"}</dd>
+    ${tags ? `<dt>Tags</dt><dd>${tags}</dd>` : ""}
+    ${routes ? `<dt>Advertised routes</dt><dd>${routes}</dd>` : ""}
+    ${exitRow}
+    ${isExitRow}
+    <dt>Tailscale SSH</dt><dd>${ts.ssh_enabled ? "enabled" : "disabled"}</dd>
+  `;
+}
+
+// ───────── bandwidth chart ─────────
+const bwIfaceEl = document.getElementById("bw-iface");
+const bwMetaEl = document.getElementById("bw-meta");
+const bwChartEl = document.getElementById("bw-chart");
+
+async function fetchBandwidthIfaces() {
+  if (!bwIfaceEl) return;
+  try {
+    const r = await fetch(`${BASE}/api/net_history`);
+    const d = await r.json();
+    const ifaces = d.ifaces || [];
+    if (!ifaces.length) {
+      bwIfaceEl.innerHTML = '<option value="">(no history yet)</option>';
+      bwMetaEl.textContent = "no samples persisted yet — wait one minute after first start";
+      return;
+    }
+    const prev = bwIfaceEl.value;
+    bwIfaceEl.innerHTML = ifaces.map((n) =>
+      `<option value="${escapeHtml(n)}"${n === prev ? " selected" : ""}>${escapeHtml(n)}</option>`).join("");
+    if (!prev) bwIfaceEl.value = ifaces[0];
+    fetchBandwidthSeries();
+  } catch (_) {}
+}
+
+async function fetchBandwidthSeries() {
+  if (!bwChartEl || !bwIfaceEl || !bwIfaceEl.value) return;
+  try {
+    const r = await fetch(`${BASE}/api/net_history?iface=${encodeURIComponent(bwIfaceEl.value)}`);
+    const d = await r.json();
+    const samples = d.samples || [];
+    drawBandwidth(bwChartEl, samples);
+    bwMetaEl.textContent = `${samples.length} samples · ${bwIfaceEl.value}`;
+  } catch (_) {}
+}
+
+function drawBandwidth(canvas, samples) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 600;
+  const cssH = canvas.clientHeight || 120;
+  if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+    canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+  if (samples.length < 2) return;
+  // Compute bps deltas. Skip negative deltas (counter resets across reboot).
+  const rxBps = []; const txBps = [];
+  for (let i = 1; i < samples.length; i++) {
+    const dt = samples[i].ts - samples[i - 1].ts;
+    if (dt <= 0) continue;
+    const drx = samples[i].rx - samples[i - 1].rx;
+    const dtx = samples[i].tx - samples[i - 1].tx;
+    rxBps.push(drx >= 0 ? drx / dt : 0);
+    txBps.push(dtx >= 0 ? dtx / dt : 0);
+  }
+  if (!rxBps.length) return;
+  const max = Math.max(1, ...rxBps, ...txBps);
+  const step = cssW / Math.max(1, rxBps.length - 1);
+  const drawSeries = (data, color) => {
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = i * step;
+      const y = cssH - (v / max) * (cssH - 4) - 2;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  };
+  drawSeries(rxBps, "#4cc9f0");
+  drawSeries(txBps, "#fbbf24");
+  // Legend in top-left.
+  ctx.font = "11px ui-monospace, monospace";
+  ctx.fillStyle = "#4cc9f0"; ctx.fillText(`↓ rx (peak ${fmtRate(Math.max(...rxBps))})`, 6, 12);
+  ctx.fillStyle = "#fbbf24"; ctx.fillText(`↑ tx (peak ${fmtRate(Math.max(...txBps))})`, 6, 26);
+}
+
+if (bwIfaceEl) bwIfaceEl.addEventListener("change", fetchBandwidthSeries);
+
 function renderPeers(peers) {
   const tbody = document.querySelector("#net-peers tbody");
   if (!peers.length) { tbody.innerHTML = '<tr><td colspan="5" class="muted">no peers</td></tr>'; return; }
@@ -717,8 +825,8 @@ function renderSockets(sockets) {
     </tr>`).join("");
 }
 
-// ───────── logs tab (sub-tabs: system / services / cron) ─────────
-const SUBTABS = ["system", "services", "cron"];
+// ───────── logs tab (sub-tabs: system / services / cron / auth) ─────────
+const SUBTABS = ["system", "services", "cron", "auth"];
 
 function activateSubtab(name) {
   if (!SUBTABS.includes(name)) name = "system";
@@ -737,6 +845,7 @@ function fetchActiveSubtab() {
   if (name === "system") fetchSyslog();
   if (name === "services") fetchServiceLog();
   if (name === "cron") fetchCronLog();
+  if (name === "auth") fetchAuthSummary();
 }
 
 document.querySelectorAll(".subtabs > .tab").forEach((b) => {
@@ -812,6 +921,44 @@ function fetchCronLog() {
 }
 if (cronlogJobEl) cronlogJobEl.addEventListener("change", fetchCronLog);
 if (cronlogRefreshEl) cronlogRefreshEl.addEventListener("click", fetchCronLog);
+
+// auth (ssh logins, last 24h)
+const authMetaEl = document.getElementById("auth-meta");
+const authRefreshEl = document.getElementById("auth-refresh");
+const authAcceptedListEl = document.getElementById("auth-accepted-list");
+const authFailedListEl = document.getElementById("auth-failed-list");
+const authAcceptedCountEl = document.getElementById("auth-accepted-count");
+const authFailedCountEl = document.getElementById("auth-failed-count");
+
+function renderAuthList(root, items, severity) {
+  if (!items.length) { root.innerHTML = '<span class="muted">none in window</span>'; return; }
+  root.innerHTML = items.slice().reverse().map((it) => {
+    const ts = it.ts || "";
+    return `<div class="event-row ${severity}">
+      <span class="event-when">${escapeHtml(ts)}</span>
+      <span class="event-kind">${escapeHtml(it.user || "?")}</span>
+      <span class="muted">${escapeHtml(it.ip || "")}</span>
+    </div>`;
+  }).join("");
+}
+
+async function fetchAuthSummary() {
+  if (!authMetaEl) return;
+  authMetaEl.textContent = "loading…";
+  try {
+    const r = await fetch(`${BASE}/api/auth/summary`);
+    if (!r.ok) { authMetaEl.textContent = `error: ${r.status}`; return; }
+    const d = await r.json();
+    authAcceptedCountEl.textContent = `(${d.accepted_count})`;
+    authFailedCountEl.textContent = `(${d.failed_count})`;
+    renderAuthList(authAcceptedListEl, d.recent_accepted || [], "info");
+    renderAuthList(authFailedListEl, d.recent_failed || [], "error");
+    authMetaEl.textContent = `window: ${d.window} · loaded ${new Date().toLocaleTimeString("en-GB")}`;
+  } catch (e) {
+    authMetaEl.textContent = `error: ${e}`;
+  }
+}
+if (authRefreshEl) authRefreshEl.addEventListener("click", fetchAuthSummary);
 
 function populateLogDropdowns(snap) {
   if (svclogUnitEl && snap.services && svclogUnitEl.dataset.populated !== "1") {

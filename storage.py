@@ -57,7 +57,60 @@ def init() -> None:
         """
     )
     _conn.execute("CREATE INDEX IF NOT EXISTS events_ts ON events (ts)")
+    _conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS net_samples (
+            ts        REAL NOT NULL,
+            iface     TEXT NOT NULL,
+            rx_bytes  INTEGER,
+            tx_bytes  INTEGER,
+            PRIMARY KEY (ts, iface)
+        )
+        """
+    )
     _conn.commit()
+
+
+def insert_net(ts: float, samples: list[dict]) -> None:
+    """Persist current cumulative byte counters for a list of interfaces.
+
+    `samples` is a list of {iface, rx_bytes, tx_bytes}. Frontend turns
+    consecutive samples into a bps rate with the timestamp delta.
+    """
+    if _conn is None or not samples:
+        return
+    with _lock:
+        _conn.executemany(
+            "INSERT OR REPLACE INTO net_samples VALUES (?,?,?,?)",
+            [(ts, s["iface"], s.get("rx_bytes"), s.get("tx_bytes")) for s in samples],
+        )
+        cutoff = time.time() - config.LONG_HISTORY_RETENTION_SEC
+        _conn.execute("DELETE FROM net_samples WHERE ts < ?", (cutoff,))
+        _conn.commit()
+
+
+def net_history(iface: str) -> list[dict]:
+    if _conn is None:
+        return []
+    cutoff = time.time() - config.LONG_HISTORY_RETENTION_SEC
+    with _lock:
+        rows = _conn.execute(
+            "SELECT ts, rx_bytes, tx_bytes FROM net_samples WHERE iface = ? AND ts >= ? ORDER BY ts ASC",
+            (iface, cutoff),
+        ).fetchall()
+    return [{"ts": r[0], "rx": r[1], "tx": r[2]} for r in rows]
+
+
+def net_ifaces_with_history() -> list[str]:
+    if _conn is None:
+        return []
+    cutoff = time.time() - config.LONG_HISTORY_RETENTION_SEC
+    with _lock:
+        rows = _conn.execute(
+            "SELECT DISTINCT iface FROM net_samples WHERE ts >= ? ORDER BY iface",
+            (cutoff,),
+        ).fetchall()
+    return [r[0] for r in rows]
 
 
 def record_event(kind: str, detail: str = "", severity: str = "info") -> None:

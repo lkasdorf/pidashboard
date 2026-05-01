@@ -149,6 +149,13 @@
   </section>
 
   <section class="panel">
+    <h2>Tailscale</h2>
+    <dl class="kv" id="net-tailscale-self">
+      <dt>State</dt><dd>–</dd>
+    </dl>
+  </section>
+
+  <section class="panel">
     <h2>Tailscale peers</h2>
     <table class="grid" id="net-peers">
       <thead><tr>
@@ -156,6 +163,17 @@
       </tr></thead>
       <tbody></tbody>
     </table>
+  </section>
+
+  <section class="panel">
+    <h2>Bandwidth (7 d)</h2>
+    <div class="syslog-controls">
+      <label class="syslog-label">interface
+        <select id="bw-iface"><option value="">(loading…)</option></select>
+      </label>
+      <span id="bw-meta" class="muted"></span>
+    </div>
+    <canvas id="bw-chart" height="120" style="width:100%"></canvas>
   </section>
 
   <section class="panel">
@@ -174,6 +192,7 @@
     <button class="tab" data-subtab="system"   role="tab" aria-selected="true"  aria-controls="subpanel-system"   id="subtab-system">System</button>
     <button class="tab" data-subtab="services" role="tab" aria-selected="false" aria-controls="subpanel-services" id="subtab-services">Services</button>
     <button class="tab" data-subtab="cron"     role="tab" aria-selected="false" aria-controls="subpanel-cron"     id="subtab-cron">Cron</button>
+    <button class="tab" data-subtab="auth"     role="tab" aria-selected="false" aria-controls="subpanel-auth"     id="subtab-auth">Auth</button>
   </nav>
 
   <section class="panel sub-tab-panel" data-subpanel="system" id="subpanel-system" role="tabpanel" aria-labelledby="subtab-system">
@@ -220,6 +239,24 @@
       <span id="cronlog-meta" class="muted"></span>
     </div>
     <pre class="logbody" id="cronlog-body">select a job and click refresh</pre>
+  </section>
+
+  <section class="panel sub-tab-panel" data-subpanel="auth" id="subpanel-auth" role="tabpanel" aria-labelledby="subtab-auth" hidden>
+    <h2>SSH auth <span class="muted">(last 24 h)</span></h2>
+    <div class="syslog-controls">
+      <span id="auth-meta" class="muted">click refresh to load</span>
+      <button id="auth-refresh">refresh</button>
+    </div>
+    <div class="auth-summary">
+      <div class="auth-col">
+        <h3>Accepted <span class="muted" id="auth-accepted-count">0</span></h3>
+        <div id="auth-accepted-list" class="events-list"></div>
+      </div>
+      <div class="auth-col">
+        <h3>Failed <span class="muted" id="auth-failed-count">0</span></h3>
+        <div id="auth-failed-list" class="events-list"></div>
+      </div>
+    </div>
   </section>
 </section>
 

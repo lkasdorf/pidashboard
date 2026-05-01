@@ -23,6 +23,7 @@ from flask import Flask, Response, jsonify, render_template, request
 import config
 import sampler
 import storage
+from collectors import auth as auth_coll
 from collectors import cron_jobs as cron_coll
 from collectors import docker as docker_coll
 from collectors import maintenance as maint_coll
@@ -177,6 +178,19 @@ def api_network():
 @app.get("/api/maintenance")
 def api_maintenance():
     return jsonify(maint_coll.status())
+
+
+@app.get("/api/auth/summary")
+def api_auth_summary():
+    return jsonify(auth_coll.summary())
+
+
+@app.get("/api/net_history")
+def api_net_history():
+    iface = request.args.get("iface", "")
+    if not iface:
+        return jsonify(ifaces=storage.net_ifaces_with_history(), samples=[])
+    return jsonify(iface=iface, samples=storage.net_history(iface))
 
 
 @app.get("/api/process/<int:pid>")

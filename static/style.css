@@ -192,6 +192,11 @@ button.pid-link {
 button.pid-link:hover { text-decoration-color: var(--accent); background: transparent; }
 button.pid-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
+/* ───────── auth summary ───────── */
+.auth-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.auth-col h3 { margin: 0 0 6px 0; font-size: 13px; font-weight: 600; }
+@media (max-width: 720px) { .auth-summary { grid-template-columns: 1fr; } }
+
 /* ───────── events list (overview) ───────── */
 .events-list { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .event-row {
