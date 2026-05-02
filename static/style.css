@@ -114,6 +114,11 @@ body {
   font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
   color: var(--muted); margin: 0 0 8px; font-weight: 600;
 }
+.panel-link {
+  margin-left: 10px; color: var(--accent); text-decoration: none;
+  font-size: 11px; letter-spacing: 0.5px; font-weight: 500;
+}
+.panel-link:hover { text-decoration: underline; }
 
 /* ───────── tables ───────── */
 .grid { width: 100%; border-collapse: collapse; font-size: 13px; }

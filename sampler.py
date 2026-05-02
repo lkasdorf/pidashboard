@@ -17,6 +17,7 @@ import storage
 from collectors import cron_jobs as cron_coll
 from collectors import devices as dev_coll
 from collectors import docker as docker_coll
+from collectors import pihole as pihole_coll
 from collectors import services as svc_coll
 from collectors import system as sys_coll
 from collectors import timers as timer_coll
@@ -80,6 +81,7 @@ def _build_snapshot() -> dict:
         "timers": timer_coll.collect_all(),
         "docker": docker_coll.containers(),
         "devices": dev_coll.status(),
+        "pihole": pihole_coll.status(),
     }
 
 

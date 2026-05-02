@@ -35,7 +35,7 @@ Three layers, one process:
 - `proc_samples_long` — per-tracked-process CPU%/MEM% (60 s, 7 d) → drives the Tracked processes panel sparklines.
 - `events` — append-only log of throttle transitions, alert fire/resolve, device up/down. Surfaced on Overview's Recent events panel and used as vertical-line overlays on sparklines (`drawSpark` accepts `events` + `tsArray` opts).
 
-`alerts.py` is the top-level module that consumes `_last_snapshot` on every sampler tick, evaluates `config.ALERT_RULES` (sustain_sec + cooldown_sec semantics), records fired alerts as events, and dispatches via `config.ALERT_CHANNELS` (ntfy push or generic JSON webhook, urllib only — no extra deps). `ALERT_CHANNELS` defaults to empty so nothing is sent until the user adds an ntfy URL — the alerts pill in the topbar still surfaces firing alerts regardless. Supported metric paths: `cpu`/`memory`/`swap`/`disk_root`/`temp` (numeric ops), throttle bits like `undervoltage`/`throttled` (`is_true`), and `device.<name>.ok` (`is_false`).
+`alerts.py` is the top-level module that consumes `_last_snapshot` on every sampler tick, evaluates `config.ALERT_RULES` (sustain_sec + cooldown_sec semantics), records fired alerts as events, and dispatches via `config.ALERT_CHANNELS` (ntfy push or generic JSON webhook, urllib only — no extra deps). `ALERT_CHANNELS` defaults to empty so nothing is sent until the user adds an ntfy URL — the alerts pill in the topbar still surfaces firing alerts regardless. Supported metric paths: `cpu`/`memory`/`swap`/`disk_root`/`temp` (numeric ops), throttle bits like `undervoltage`/`throttled` (`is_true`), `device.<name>.ok` (`is_false`), and `pihole.<key>` for keys exposed by `collectors/pihole.py` (`pihole.dhcp_active` with `is_false`, `pihole.gravity_stale` with `is_true`). `pihole.*` returns `None` when the collector reports `available: False`, so rules don't fire on "unknown" — they fire only when we positively observe the bad state.
 
 `/healthz` returns rich JSON: `status` ∈ {ok, degraded, critical, warming-up} plus a `checks` block. **`critical` (firing alert OR currently throttled/undervolted) is reported as HTTP 503** so external monitors (Uptime Kuma etc.) alarm without parsing JSON. `degraded` (disk >80 %, temp >70 °C, swap >50 %) stays HTTP 200.
 
@@ -47,6 +47,8 @@ Three layers, one process:
 - `TRACKED_PROCESSES` — process names sampled into `proc_samples_long`. Match is "exe name OR cmdline substring" so Python services whose os-level name is just `python3` are still tracked.
 - `WATCHED_DEVICES` — list of `{name, host, method, port?, timeout?, verify_tls?}` probed every 30 s by `collectors/devices.py` (own daemon, parallel probes via `ThreadPoolExecutor`). Methods: `ping` / `tcp` / `http` / `https`. `verify_tls` defaults to **False** because reachability is the goal, not authenticity — a NAS with a self-signed cert is still "up". Up↔down transitions emit `device.up.<name>` / `device.down.<name>` events.
 - `ALERT_RULES` and `ALERT_CHANNELS` — see alerts.py docs above.
+
+`collectors/pihole.py` reads `/etc/pihole/{pihole-FTL.db,dhcp.leases,pihole.toml,gravity.db}` directly (no HTTP API, no app-password). The dashboard process must be in the `pihole` group for the SQLite/file reads — without it, `gravity_age_sec` still works (only needs dir traversal + stat) but the other three fields are `None` and the panel shows an "unavailable" hint. Daemon thread, 30 s cadence, separate from sampler so a slow FTL DB never delays the live SSE loop.
 
 ## Frontend (`static/app.js`, `templates/index.html`)
 

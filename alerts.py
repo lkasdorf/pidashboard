@@ -50,6 +50,14 @@ def _extract(snap: dict, metric: str):
             if d.get("name") == name:
                 return bool(d.get("ok"))
         return None  # device not in snapshot — treat as unknown, do not fire
+    # pihole.<key> — bool fields exposed by collectors.pihole.status().
+    # Returns None when Pi-hole files are unreadable, so rules don't fire on
+    # "unknown" — they fire only when we positively observe the bad state.
+    if metric.startswith("pihole."):
+        ph = snap.get("pihole") or {}
+        if not ph.get("available"):
+            return None
+        return ph.get(metric[len("pihole."):])
     throttle_now = ((sys_.get("throttle") or {}).get("now")) or {}
     if metric in throttle_now:
         return throttle_now[metric]

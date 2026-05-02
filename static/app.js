@@ -252,6 +252,7 @@ function applySnapshot(snap) {
   renderProcs(sys.top_processes);
   renderTrackedProcs(sys.tracked_processes || []);
   renderDevices(snap.devices || []);
+  renderPihole(snap.pihole || {});
   populateLogDropdowns(snap);
   updateFavicon(sys.cpu.percent);
 
@@ -399,6 +400,53 @@ function renderDevices(items) {
       <td>${lastSeen}</td>
     </tr>`;
   }).join("");
+}
+
+function fmtAge(sec) {
+  if (sec == null) return "–";
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.round(sec / 60)} min ago`;
+  if (sec < 86400) return `${Math.round(sec / 3600)} h ago`;
+  return `${Math.round(sec / 86400)} d ago`;
+}
+
+function renderPihole(p) {
+  const root = document.getElementById("pihole-stats");
+  if (!root) return;
+  if (!p || !p.available) {
+    root.innerHTML = `<dt>Status</dt><dd><span class="muted">unavailable — process needs read access to /etc/pihole (add to <code>pihole</code> group)</span></dd>`;
+    return;
+  }
+  const rows = [];
+
+  // DNS queries (last hour) + % blocked
+  if (p.queries_last_hour != null) {
+    const pct = p.blocked_pct != null ? `${p.blocked_pct.toFixed(1)}%` : "–";
+    const blocked = p.blocked_last_hour != null ? p.blocked_last_hour.toLocaleString() : "–";
+    const total = p.queries_last_hour.toLocaleString();
+    rows.push(`<dt>Queries (1 h)</dt><dd>${total} <span class="muted">· blocked ${blocked} (${pct})</span></dd>`);
+  }
+
+  // DHCP
+  if (p.dhcp_active != null) {
+    const dot = p.dhcp_active ? '<span class="dot good"></span>' : '<span class="dot bad"></span>';
+    const state = p.dhcp_active ? "active" : "off";
+    const leases = p.dhcp_active && p.dhcp_leases != null
+      ? ` <span class="muted">· ${p.dhcp_leases} lease${p.dhcp_leases === 1 ? "" : "s"}</span>`
+      : "";
+    rows.push(`<dt>DHCP</dt><dd>${dot}${state}${leases}</dd>`);
+  } else if (p.dhcp_leases != null) {
+    rows.push(`<dt>DHCP leases</dt><dd>${p.dhcp_leases}</dd>`);
+  }
+
+  // Gravity (blocklist) age
+  if (p.gravity_age_sec != null) {
+    const dot = p.gravity_stale ? '<span class="dot warn"></span>' : '<span class="dot good"></span>';
+    const stale = p.gravity_stale ? ' <span class="muted">· stale (>14 d)</span>' : "";
+    rows.push(`<dt>Gravity</dt><dd>${dot}${fmtAge(p.gravity_age_sec)}${stale}</dd>`);
+  }
+
+  root.innerHTML = rows.join("") || `<dt>Status</dt><dd><span class="muted">no data yet</span></dd>`;
 }
 
 function renderTimers(items) {

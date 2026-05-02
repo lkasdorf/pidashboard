@@ -31,6 +31,7 @@ from collectors import devices as dev_coll
 from collectors import docker as docker_coll
 from collectors import maintenance as maint_coll
 from collectors import network as net_coll
+from collectors import pihole as pihole_coll
 from collectors import services as svc_coll
 from collectors import syslog as syslog_coll
 from collectors import system as sys_coll
@@ -278,6 +279,7 @@ def main() -> None:
     sampler.start()
     maint_coll.start()
     dev_coll.start()
+    pihole_coll.start()
 
     if args.debug:
         app.run(host=args.host, port=args.port, debug=True, threaded=True, use_reloader=False)

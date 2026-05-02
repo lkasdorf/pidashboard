@@ -106,14 +106,20 @@ ALERT_CHANNELS: list[dict] = []
 #     soft_temp_limit                                 — bool (use is_true)
 #   device.<name>.ok                                  — bool, True iff probe ok
 #                                                       (use is_false for "down")
+#   pihole.dhcp_active                                — bool; pair with is_false
+#                                                       to alert on DHCP off
+#   pihole.gravity_stale                              — bool; True iff gravity.db
+#                                                       mtime > 14 d (use is_true)
 # To alert on a watched device going down for >60 s, add a rule like:
 #   {"id": "router-down", "metric": "device.router.ok", "op": "is_false",
 #    "sustain_sec": 60, "cooldown_sec": 600}
 ALERT_RULES: list[dict] = [
-    {"id": "cpu-high",     "metric": "cpu",          "op": ">",       "threshold": 90, "sustain_sec": 300, "cooldown_sec": 1800},
-    {"id": "temp-hot",     "metric": "temp",         "op": ">",       "threshold": 75, "sustain_sec": 60,  "cooldown_sec": 1800},
-    {"id": "disk-full",    "metric": "disk_root",    "op": ">",       "threshold": 90, "sustain_sec": 0,   "cooldown_sec": 86400},
-    {"id": "swap-high",    "metric": "swap",         "op": ">",       "threshold": 50, "sustain_sec": 600, "cooldown_sec": 3600},
-    {"id": "undervoltage", "metric": "undervoltage", "op": "is_true",                  "sustain_sec": 0,   "cooldown_sec": 1800},
-    {"id": "throttled",    "metric": "throttled",    "op": "is_true",                  "sustain_sec": 0,   "cooldown_sec": 1800},
+    {"id": "cpu-high",       "metric": "cpu",                 "op": ">",        "threshold": 90, "sustain_sec": 300, "cooldown_sec": 1800},
+    {"id": "temp-hot",       "metric": "temp",                "op": ">",        "threshold": 75, "sustain_sec": 60,  "cooldown_sec": 1800},
+    {"id": "disk-full",      "metric": "disk_root",           "op": ">",        "threshold": 90, "sustain_sec": 0,   "cooldown_sec": 86400},
+    {"id": "swap-high",      "metric": "swap",                "op": ">",        "threshold": 50, "sustain_sec": 600, "cooldown_sec": 3600},
+    {"id": "undervoltage",   "metric": "undervoltage",        "op": "is_true",                   "sustain_sec": 0,   "cooldown_sec": 1800},
+    {"id": "throttled",      "metric": "throttled",           "op": "is_true",                   "sustain_sec": 0,   "cooldown_sec": 1800},
+    {"id": "pihole-dhcp-off","metric": "pihole.dhcp_active",  "op": "is_false",                  "sustain_sec": 60,  "cooldown_sec": 3600},
+    {"id": "gravity-stale",  "metric": "pihole.gravity_stale","op": "is_true",                   "sustain_sec": 0,   "cooldown_sec": 86400},
 ]
