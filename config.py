@@ -30,6 +30,7 @@ CONTROLLABLE_SERVICES: list[str] = [
     "tailscaled.service",
     "ssh.service",
     "cron.service",
+    "pihole-FTL.service",
 ]
 
 WATCHED_SERVICES: list[str] = [
@@ -68,6 +69,7 @@ TRACKED_PROCESSES: list[str] = [
     "pidashboard",
     "tailscaled",
     "dockerd",
+    "pihole-FTL",
 ]
 
 # LAN/Tailnet devices probed every 30 s by collectors/devices.py.
@@ -86,6 +88,7 @@ WATCHED_DEVICES: list[dict] = [
     {"name": "router",     "host": "192.168.0.1",   "method": "http"},
     {"name": "synology",   "host": "192.168.0.2",   "method": "https", "port": 443},
     {"name": "gw-223",     "host": "192.168.223.1", "method": "http"},
+    {"name": "pihole-dns", "host": "127.0.0.1",     "method": "tcp",   "port": 53},
 ]
 
 # Alert channels — leave empty to evaluate rules silently (Overview events

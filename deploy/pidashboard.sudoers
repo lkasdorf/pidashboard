@@ -6,7 +6,7 @@
 #     /etc/sudoers.d/pidashboard
 #   sudo visudo -c
 #
-# Allows the alneri user to start/stop/restart exactly the four whitelisted units
+# Allows the alneri user to start/stop/restart exactly the whitelisted units
 # without a password. Keep this list in sync with CONTROLLABLE_SERVICES in config.py.
 
 alneri ALL=(root) NOPASSWD: /usr/bin/systemctl start financeos.service, \
@@ -20,4 +20,7 @@ alneri ALL=(root) NOPASSWD: /usr/bin/systemctl start financeos.service, \
                             /usr/bin/systemctl restart ssh.service, \
                             /usr/bin/systemctl start cron.service, \
                             /usr/bin/systemctl stop cron.service, \
-                            /usr/bin/systemctl restart cron.service
+                            /usr/bin/systemctl restart cron.service, \
+                            /usr/bin/systemctl start pihole-FTL.service, \
+                            /usr/bin/systemctl stop pihole-FTL.service, \
+                            /usr/bin/systemctl restart pihole-FTL.service
