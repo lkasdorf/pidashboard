@@ -27,6 +27,7 @@ DB_PATH: Path = Path(__file__).parent / "data" / "samples.db"
 
 CONTROLLABLE_SERVICES: list[str] = [
     "financeos.service",
+    "fxdashboard.service",
     "tailscaled.service",
     "ssh.service",
     "cron.service",
@@ -36,6 +37,8 @@ CONTROLLABLE_SERVICES: list[str] = [
 WATCHED_SERVICES: list[str] = [
     *CONTROLLABLE_SERVICES,
     "pidashboard.service",
+    "unbound.service",
+    "docker.service",
 ]
 
 ALLOWED_ACTIONS: tuple[str, ...] = ("start", "stop", "restart")
@@ -66,6 +69,7 @@ TOP_PROCESS_COUNT: int = 5
 # so a name with several worker children appears as one aggregated series.
 TRACKED_PROCESSES: list[str] = [
     "financeos",
+    "fxdashboard",
     "pidashboard",
     "tailscaled",
     "dockerd",
