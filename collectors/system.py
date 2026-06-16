@@ -131,12 +131,16 @@ def _storage_health() -> list[dict]:
             pre_eol_map = {"0x01": "normal", "0x02": "warning", "0x03": "urgent"}
             pre_eol = pre_eol_map.get(pre_eol_raw.strip())
         model = _read_text(f"{base}/device/name") or _read_text(f"{base}/device/model")
+        # Bus/card type ("SD" / "MMC" for mmc devices); lets the UI explain why
+        # SD cards never report wear data (life_time/pre_eol are eMMC-only).
+        dev_type = _read_text(f"{base}/device/type")
         # Skip devices we can't say anything useful about.
         if sectors_written is None and life_pct is None:
             continue
         out.append({
             "device": f"/dev/{name}",
             "model": model,
+            "type": dev_type,
             "bytes_written_since_boot": (sectors_written * 512) if sectors_written is not None else None,
             "life_used_pct": life_pct,
             "pre_eol": pre_eol,

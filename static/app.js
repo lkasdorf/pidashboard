@@ -534,8 +534,11 @@ function renderStorage(items) {
     valEl.textContent = `${worstWear}% used`;
     valEl.className = "value small" + (worstWear >= 80 || eolBad ? " bad" : worstWear >= 50 ? " warn" : " good");
   } else {
-    valEl.textContent = "no wear data";
+    valEl.textContent = "n/a";
     valEl.className = "value small";
+    const t = items[0] && items[0].type;
+    const what = t === "SD" ? "SD card" : t === "MMC" ? "eMMC" : "this device";
+    valEl.title = `${what} — no wear telemetry (only eMMC/NVMe report life-used %)`;
   }
   footEl.innerHTML = items.map((d) => {
     const parts = [`<code>${escapeHtml(d.device)}</code>`];
