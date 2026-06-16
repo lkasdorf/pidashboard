@@ -37,6 +37,11 @@ from collectors import syslog as syslog_coll
 from collectors import system as sys_coll
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
+# Re-check template mtimes on every render so edits to index.html show up
+# without a service restart (matches the "templates picked up live" contract
+# in CLAUDE.md). Cheap stat() per request; Jinja still caches the compiled
+# template while the file is unchanged.
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 
 class ScriptNamePrefix:

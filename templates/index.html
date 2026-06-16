@@ -3,8 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>pidashboard</title>
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}" id="favicon">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -26,6 +30,29 @@
 <main>
 
 <section class="tab-panel" data-panel="overview" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+  <section class="hero" aria-label="Key system stats">
+    <div class="hero-stat hero-primary">
+      <span class="hero-label">CPU Load</span>
+      <span class="value" id="hero-cpu-val">–</span>
+      <span class="hero-sub" id="hero-cpu-sub">load –</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-label">Memory</span>
+      <span class="value" id="hero-mem-val">–</span>
+      <span class="hero-sub" id="hero-mem-sub">– / –</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-label">Temperature</span>
+      <span class="value" id="hero-temp-val">–</span>
+      <span class="hero-sub" id="hero-temp-sub">SoC</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-label">Uptime</span>
+      <span class="value" id="hero-uptime-val">–</span>
+      <span class="hero-sub" id="hero-uptime-sub">swap –</span>
+    </div>
+  </section>
+
   <div class="range-toggle" role="group" aria-label="Sparkline range">
     <button class="range-btn" data-range="live" aria-pressed="true">2 h live</button>
     <button class="range-btn" data-range="7d"   aria-pressed="false">7 d</button>

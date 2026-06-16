@@ -198,6 +198,11 @@ function setMetric(id, text, cls = "") {
   el.className = "value" + (cls ? " " + cls : "");
 }
 
+function setHeroSub(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
 // ───────── overview snapshot ─────────
 function renderCores(perCore) {
   const root = document.getElementById("cpu-cores");
@@ -243,6 +248,19 @@ function applySnapshot(snap) {
   setMetric("uptime-val", fmtUptime(sys.uptime_sec));
   document.getElementById("swap-foot").textContent =
     `swap: ${sys.swap.percent.toFixed(0)}% (${fmtBytes(sys.swap.used)} / ${fmtBytes(sys.swap.total)})`;
+
+  // hero strip — mirrors the headline metrics in a prominent at-a-glance band
+  setMetric("hero-cpu-val", `${sys.cpu.percent.toFixed(0)}%`, classForPercent(sys.cpu.percent));
+  setHeroSub("hero-cpu-sub", `load ${sys.cpu.load1.toFixed(2)} · ${sys.cpu.per_core.length} cores`);
+  setMetric("hero-mem-val", `${sys.memory.percent.toFixed(0)}%`, classForPercent(sys.memory.percent));
+  setHeroSub("hero-mem-sub", `${fmtBytes(sys.memory.used)} / ${fmtBytes(sys.memory.total)}`);
+  if (sys.temp_c != null) {
+    setMetric("hero-temp-val", `${sys.temp_c.toFixed(1)} °C`, classForTemp(sys.temp_c));
+  } else {
+    setMetric("hero-temp-val", "n/a");
+  }
+  setMetric("hero-uptime-val", fmtUptime(sys.uptime_sec));
+  setHeroSub("hero-uptime-sub", `swap ${sys.swap.percent.toFixed(0)}%`);
 
   refreshSparks();
   renderServices(snap.services);
